@@ -1,0 +1,28 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+mongodb_env/
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Environment
+.env
+*.env
+
+# Config files
+*.config.json
+*.key.key
+
+# IDE
+.vscode/
+.idea/
+
+# Distribution
+dist/
+build/
+*.exe
+*.spec
