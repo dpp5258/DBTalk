@@ -103,14 +103,40 @@ class UserWindow:
         self.tree.pack(side="left", fill="both", expand=True, padx=(10,0), pady=10)
         scrollbar.pack(side="right", fill="y", pady=10)
         
+        # 绑定双击事件
+        self.tree.bind('<Double-Button-1>', self.on_history_item_double_click)
+        
+        # 修改：增加操作按钮框架
+        btn_frame = tk.Frame(parent)
+        btn_frame.pack(pady=10)
+        
         tk.Button(
-            parent,
+            btn_frame,
             text="刷新",
             command=self.refresh_history,
             bg="#2196F3",
             fg="white",
             font=("Arial", 10)
-        ).pack(pady=10)
+        ).pack(side="left", padx=5)
+        
+        tk.Button(
+            btn_frame,
+            text="编辑选中",
+            command=self.edit_selected_submission,
+            bg="#FF9800",
+            fg="white",
+            font=("Arial", 10)
+        ).pack(side="left", padx=5)
+        
+        tk.Button(
+            btn_frame,
+            text="删除选中",
+            command=self.delete_selected_submission,
+            bg="#f44336",
+            fg="white",
+            font=("Arial", 10)
+        ).pack(side="left", padx=5)
+        
         self.refresh_history()
 
     def setup_community_tab(self, parent):
@@ -263,8 +289,142 @@ class UserWindow:
         else:
             for sub in submissions:
                 time_str = sub['created_at'].strftime("%Y-%m-%d %H:%M") if sub['created_at'] else "未知"
-                self.tree.insert("", "end", values=(time_str, sub['title'], sub['status']))
-    
+                # 将 _id 存入 tags 以便双击时获取
+                self.tree.insert(
+                    "", 
+                    "end", 
+                    values=(time_str, sub['title'], sub['status']),
+                    tags=(str(sub['_id']),)
+                )
+
+    def on_history_item_double_click(self, event):
+        """双击查看提交历史详情"""
+        selection = self.tree.selection()
+        if not selection:
+            return
+        
+        item = self.tree.item(selection[0])
+        if not item['tags']:
+            return
+            
+        sub_id = item['tags'][0]
+        
+        try:
+            # 通过服务层获取详情
+            sub_doc = self.submission_service.get_submission_by_id(sub_id)
+            if sub_doc:
+                self.show_content_dialog(sub_doc['title'], sub_doc['content'], sub_doc['username'])
+            else:
+                messagebox.showwarning("提示", "内容不存在或已被删除")
+        except Exception as e:
+            messagebox.showerror("错误", f"加载详情失败: {str(e)}")
+
+    def edit_selected_submission(self):
+        """编辑选中的提交"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("提示", "请先选择一条提交记录")
+            return
+        
+        item = self.tree.item(selection[0])
+        if not item['tags']:
+            return
+            
+        sub_id = item['tags'][0]
+        
+        try:
+            sub_doc = self.submission_service.get_submission_by_id(sub_id)
+            if sub_doc:
+                # 权限二次校验（虽然前端已过滤，但后端也做了校验）
+                if sub_doc['username'] != self.user['username']:
+                    messagebox.showerror("错误", "无权编辑此提交")
+                    return
+                self.show_edit_dialog(sub_doc)
+            else:
+                messagebox.showwarning("提示", "内容不存在或已被删除")
+        except Exception as e:
+            messagebox.showerror("错误", f"加载详情失败: {str(e)}")
+
+    def delete_selected_submission(self):
+        """删除选中的提交"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("提示", "请先选择一条提交记录")
+            return
+        
+        item = self.tree.item(selection[0])
+        if not item['tags']:
+            return
+            
+        sub_id = item['tags'][0]
+        title = item['values'][1] # 获取标题用于确认提示
+        
+        if not messagebox.askyesno("确认删除", f"确定要删除提交《{title}》吗？\n此操作不可恢复。"):
+            return
+
+        try:
+            success, msg = self.submission_service.delete_submission(sub_id, self.user['username'])
+            if success:
+                messagebox.showinfo("成功", msg)
+                self.refresh_history()
+            else:
+                messagebox.showerror("错误", msg)
+        except Exception as e:
+            messagebox.showerror("错误", f"删除失败: {str(e)}")
+
+    def show_edit_dialog(self, sub_doc):
+        """显示编辑内容弹窗"""
+        dialog = tk.Toplevel(self.window)
+        dialog.title(f"编辑提交 - {sub_doc['title']}")
+        dialog.geometry("500x450")
+        dialog.transient(self.window)
+        dialog.grab_set()
+        
+        header_frame = tk.Frame(dialog, bg="#e3f2fd", pady=10)
+        header_frame.pack(fill="x")
+        tk.Label(header_frame, text="修改内容将重置审批状态为【待审核】", font=("Arial", 10), bg="#e3f2fd", fg="#d32f2f").pack()
+        
+        form_frame = tk.Frame(dialog, padx=10, pady=10)
+        form_frame.pack(fill="both", expand=True)
+        
+        tk.Label(form_frame, text="标题:", font=("Arial", 11)).pack(anchor="w")
+        title_entry = tk.Entry(form_frame, font=("Arial", 11), width=50)
+        title_entry.insert(0, sub_doc['title'])
+        title_entry.pack(pady=5, fill="x")
+        
+        tk.Label(form_frame, text="内容:", font=("Arial", 11)).pack(anchor="w", pady=(10,0))
+        content_text = scrolledtext.ScrolledText(form_frame, height=15, font=("Arial", 11), wrap=tk.WORD)
+        content_text.insert("1.0", sub_doc['content'])
+        content_text.pack(fill="both", expand=True, pady=5)
+        
+        def save_changes():
+            new_title = title_entry.get().strip()
+            new_content = content_text.get("1.0", tk.END).strip()
+            
+            if not new_title or not new_content:
+                messagebox.showwarning("提示", "标题和内容不能为空")
+                return
+            
+            success, msg = self.submission_service.update_submission(
+                str(sub_doc['_id']), 
+                self.user['username'], 
+                new_title, 
+                new_content
+            )
+            
+            if success:
+                messagebox.showinfo("成功", msg)
+                dialog.destroy()
+                self.refresh_history() # 刷新列表以显示新的状态 (pending)
+            else:
+                messagebox.showerror("错误", msg)
+                
+        btn_frame = tk.Frame(dialog, pady=10)
+        btn_frame.pack(fill="x")
+        
+        tk.Button(btn_frame, text="保存修改", command=save_changes, bg="#4CAF50", fg="white", font=("Arial", 11)).pack(side="left", padx=20, expand=True)
+        tk.Button(btn_frame, text="取消", command=dialog.destroy, bg="#9E9E9E", fg="white", font=("Arial", 11)).pack(side="right", padx=20, expand=True)
+
     def logout(self):
         if messagebox.askyesno("确认", "确定要登出吗？"):
             self.window.destroy()
