@@ -1,16 +1,18 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-from utils.db import Database
 from views.user_window import UserWindow
 from views.admin_window import AdminWindow
 from views.settings_window import SettingsWindow
-from datetime import datetime
-
+from models.constants import UserRole
+from config import Config
+from services.auth_service import AuthService
+from utils.db import Database # 仅用于检查连接状态
 
 class LoginWindow:
     def __init__(self, root):
         self.root = root
-        self.db = Database()
+        self.db = Database() # 保留用于连接状态检查
+        self.auth_service = AuthService() # 新增
         self.setup_menu()
         self.setup_ui()
         self.check_database_connection()
@@ -58,7 +60,6 @@ class LoginWindow:
         self.root.geometry("400x500")
         self.root.resizable(False, False)
         
-        # 标题
         title_label = tk.Label(
             self.root,
             text="文本提交系统",
@@ -67,7 +68,6 @@ class LoginWindow:
         )
         title_label.pack(pady=30)
         
-        # 登录框
         login_frame = tk.Frame(self.root, bg="#f0f0f0", padx=20, pady=20)
         login_frame.pack(padx=40, pady=20, fill="both")
         
@@ -106,7 +106,6 @@ class LoginWindow:
         
         self.root.bind('<Return>', lambda event: self.login())
         
-        # 连接状态
         status_frame = tk.Frame(self.root, bg="#f0f0f0", height=30)
         status_frame.pack(fill="x", side="bottom")
         self.connection_status = tk.Label(
@@ -124,11 +123,11 @@ class LoginWindow:
         if not username or not password:
             messagebox.showerror("错误", "请输入用户名和密码")
             return
-        user = self.db.authenticate_user(username, password)
+        user = self.auth_service.login(username, password)
         if user:
             messagebox.showinfo("成功", f"欢迎回来, {username}!")
             self.root.withdraw()
-            if user.get("role") == "admin":
+            if user.get("role") == UserRole.ADMIN:
                 AdminWindow(self.root, user)
             else:
                 UserWindow(self.root, user)
@@ -175,7 +174,7 @@ class LoginWindow:
             if password != confirm:
                 messagebox.showerror("错误", "两次输入的密码不一致")
                 return
-            success, message = self.db.create_user(username, password, email)
+            success, message = self.auth_service.register(username, password, email)
             if success:
                 messagebox.showinfo("成功", message)
                 register_window.destroy()

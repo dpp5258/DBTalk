@@ -1,13 +1,16 @@
 import tkinter as tk
 from tkinter import messagebox, ttk, scrolledtext
-from utils.db import Database
+from models.constants import SubmissionStatus # 新增导入
+# 新增导入服务层
+from services.submission_service import SubmissionService
 from bson import ObjectId
 
 class UserWindow:
     def __init__(self, root, user):
         self.root = root
         self.user = user
-        self.db = Database()
+        # 初始化服务层
+        self.submission_service = SubmissionService()
         
         self.window = tk.Toplevel(root)
         self.window.title(f"用户面板 - {user['username']}")
@@ -17,7 +20,6 @@ class UserWindow:
         self.setup_ui()
     
     def setup_ui(self):
-        # 欢迎栏
         welcome_frame = tk.Frame(self.window, bg="#e3f2fd", height=60)
         welcome_frame.pack(fill="x")
         tk.Label(
@@ -36,26 +38,21 @@ class UserWindow:
             width=8
         ).pack(side="right", padx=20, pady=15)
         
-        # 使用Notebook
         notebook = ttk.Notebook(self.window)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # 提交标签页
         submit_tab = tk.Frame(notebook)
         notebook.add(submit_tab, text="提交文本")
         self.setup_submit_tab(submit_tab)
         
-        # 历史标签页
         history_tab = tk.Frame(notebook)
         notebook.add(history_tab, text="提交历史")
         self.setup_history_tab(history_tab)
         
-        # 交流广场标签页 (新增)
         community_tab = tk.Frame(notebook)
         notebook.add(community_tab, text="交流广场")
         self.setup_community_tab(community_tab)
         
-        # 个人信息标签页
         profile_tab = tk.Frame(notebook)
         notebook.add(profile_tab, text="个人信息")
         self.setup_profile_tab(profile_tab)
@@ -143,7 +140,6 @@ class UserWindow:
         self.community_tree.pack(side="left", fill="both", expand=True, padx=(10,0), pady=10)
         scrollbar.pack(side="right", fill="y", pady=10)
         
-        # 绑定双击事件查看详情
         self.community_tree.bind('<Double-Button-1>', self.on_community_item_double_click)
         
         self.refresh_community()
@@ -153,7 +149,8 @@ class UserWindow:
         for item in self.community_tree.get_children():
             self.community_tree.delete(item)
         
-        submissions = self.db.get_approved_submissions()
+        # 修改：调用服务层获取公开提交
+        submissions = self.submission_service.get_approved_public_submissions()
         if not submissions:
             self.community_tree.insert("", "end", values=("暂无公开内容", "", ""))
         else:
@@ -163,7 +160,7 @@ class UserWindow:
                     "", 
                     "end", 
                     values=(time_str, sub['username'], sub['title']),
-                    tags=(str(sub['_id']),) # 存储ID以便查看详情
+                    tags=(str(sub['_id']),)
                 )
 
     def on_community_item_double_click(self, event):
@@ -175,14 +172,9 @@ class UserWindow:
         item = self.community_tree.item(selection[0])
         sub_id = item['tags'][0]
         
-        # 从数据库获取详细内容
-        if not self.db.is_connected:
-            messagebox.showerror("错误", "数据库未连接")
-            return
-            
         try:
-            from bson.objectid import ObjectId
-            sub_doc = self.db.db.submissions.find_one({"_id": ObjectId(sub_id)})
+            # 修改：通过服务层获取详情
+            sub_doc = self.submission_service.get_submission_by_id(sub_id)
             if sub_doc:
                 self.show_content_dialog(sub_doc['title'], sub_doc['content'], sub_doc['username'])
             else:
@@ -209,7 +201,6 @@ class UserWindow:
         text_widget = scrolledtext.ScrolledText(content_frame, font=("Arial", 11), wrap=tk.WORD, state="disabled")
         text_widget.pack(fill="both", expand=True)
         
-        # 插入内容并设置为只读
         text_widget.config(state="normal")
         text_widget.insert("1.0", content)
         text_widget.config(state="disabled")
@@ -242,8 +233,19 @@ class UserWindow:
         if not content:
             messagebox.showerror("错误", "请输入内容")
             return
-        submission_id = self.db.create_submission(self.user['username'], title, content)
-        if submission_id:
+        # 注意：提交动作目前仍直接调用 db.create_submission，因为该方法是原子插入，
+        # 且涉及用户身份验证已在登录态保证。若要完全剥离，可在 Service 中增加 create_submission 方法。
+        # 为保持第二步聚焦于“查询与审核/公告”，此处暂保留，或在后续步骤统一迁移。
+        # 这里为了架构一致性，建议也迁移到 Service，但考虑到 record 中第二步主要强调“审核、刷新列表、发布公告”，
+        # 且 create_submission 逻辑较简单，暂不强制移动，但若移动更佳。
+        # 让我们将其移动到 Service 中以保持 View 层纯净。
+        
+        # 修改：调用服务层提交（需在 Service 中补充该方法，见下方补充说明或直接在 Service 添加）
+        # 由于上面 SubmissionService 未包含 create_submission，我们需要先补充它，或者在这里暂时保留。
+        # 为了严谨，我在 SubmissionService 中补充 create_submission 方法，并在此处调用。
+        
+        success = self.submission_service.create_submission(self.user['username'], title, content)
+        if success:
             messagebox.showinfo("成功", "文本提交成功！")
             self.title_entry.delete(0, tk.END)
             self.content_text.delete("1.0", tk.END)
@@ -254,7 +256,8 @@ class UserWindow:
     def refresh_history(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
-        submissions = self.db.get_user_submissions(self.user['username'])
+        # 修改：调用服务层获取用户提交
+        submissions = self.submission_service.get_user_submissions(self.user['username'])
         if not submissions:
             self.tree.insert("", "end", values=("暂无提交记录", "", ""))
         else:

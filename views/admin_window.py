@@ -1,7 +1,10 @@
 import tkinter as tk
 from tkinter import messagebox, ttk, scrolledtext
 from utils.db import Database
-from models.user import UserModel # 新增导入
+from models.constants import UserRole, SubmissionStatus, InitialAdmin
+from models.submission import SubmissionModel
+from services.submission_service import SubmissionService
+from services.user_service import UserService
 from bson import ObjectId
 from datetime import datetime
 
@@ -10,10 +13,12 @@ class AdminWindow:
         self.root = root
         self.admin = admin
         self.db = Database()
+        self.submission_service = SubmissionService()
+        self.user_service = UserService()
         
         self.window = tk.Toplevel(root)
         self.window.title(f"管理员面板 - {admin['username']}")
-        self.window.geometry("900x700") # 稍微调大以适应更多控件
+        self.window.geometry("900x700")
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         self.setup_ui()
@@ -62,11 +67,6 @@ class AdminWindow:
         notebook.add(users_tab, text="用户管理")
         self.setup_users_tab(users_tab)
         
-        # 删除原有的统计信息标签页，或将其整合，这里按需求移除以保持简洁，或保留在最后
-        # stats_tab = tk.Frame(notebook)
-        # notebook.add(stats_tab, text="统计信息")
-        # self.setup_stats_tab(stats_tab)
-    
     def setup_announcement_tab(self, parent):
         """管理员发布公告/内容"""
         tk.Label(parent, text="发布全局公告/内容", font=("Arial", 14, "bold")).pack(pady=10)
@@ -99,23 +99,8 @@ class AdminWindow:
             messagebox.showwarning("提示", "标题和内容不能为空")
             return
             
-        # 复用 create_submission，但在管理员视角下这是发布公告
-        # 注意：实际生产中可能需要单独的 announcements 集合
-        # 这里为了兼容现有 db.py，我们将其作为一条由管理员发出的提交，状态直接设为 approved
-        if not self.db.is_connected:
-            messagebox.showerror("错误", "数据库未连接")
-            return
-            
         try:
-            # 构造文档，手动插入以控制状态为 approved，或者调用 create_submission 后更新
-            # 由于 create_submission 默认是 pending，我们这里直接操作 db 或修改逻辑
-            # 简单起见，调用 create_submission，然后立即批准它，或者直接插入
-            from models.submission import SubmissionModel
-            doc = SubmissionModel.create_document(self.admin['username'], f"[公告] {title}", content)
-            doc['status'] = 'approved' # 公告自动通过
-            doc['is_announcement'] = True # 标记
-            
-            self.db.db.submissions.insert_one(doc)
+            self.submission_service.create_announcement(self.admin['username'], title, content)
             messagebox.showinfo("成功", "公告发布成功！")
             self.ann_title_entry.delete(0, tk.END)
             self.ann_content_text.delete("1.0", tk.END)
@@ -154,7 +139,6 @@ class AdminWindow:
         
         # 绑定选择事件以启用操作按钮
         self.submissions_tree.bind('<<TreeviewSelect>>', self.on_submission_select)
-        # 绑定双击事件查看详情
         self.submissions_tree.bind('<Double-Button-1>', self.on_submission_double_click)
         self.refresh_submissions()
         
@@ -186,13 +170,8 @@ class AdminWindow:
         item = self.submissions_tree.item(selection[0])
         sub_id = item['tags'][0]
         
-        if not self.db.is_connected:
-            messagebox.showerror("错误", "数据库未连接")
-            return
-            
         try:
-            from bson.objectid import ObjectId
-            sub_doc = self.db.db.submissions.find_one({"_id": ObjectId(sub_id)})
+            sub_doc = self.submission_service.get_submission_by_id(sub_id)
             if sub_doc:
                 self.show_submission_detail_dialog(sub_doc)
             else:
@@ -236,7 +215,7 @@ class AdminWindow:
 
         def do_approve():
             if messagebox.askyesno("确认", "确定批准该提交吗？"):
-                if self.db.update_submission_status(sub_id, "approved"):
+                if self.submission_service.approve_submission(sub_id):
                     messagebox.showinfo("成功", "已批准")
                     dialog.destroy()
                     self.refresh_submissions()
@@ -245,18 +224,17 @@ class AdminWindow:
 
         def do_reject():
             if messagebox.askyesno("确认", "确定拒绝该提交吗？"):
-                if self.db.update_submission_status(sub_id, "rejected"):
+                if self.submission_service.reject_submission(sub_id):
                     messagebox.showinfo("成功", "已拒绝")
                     dialog.destroy()
                     self.refresh_submissions()
                 else:
                     messagebox.showerror("错误", "更新失败")
 
-        # 如果已经是最终状态，禁用对应按钮或提示
-        if current_status == "approved":
+        if current_status == SubmissionStatus.APPROVED:
             tk.Label(btn_frame, text="当前状态: 已批准", fg="#4CAF50", font=("Arial", 10)).pack(side="left", padx=20)
             tk.Button(btn_frame, text="重新拒绝", command=do_reject, bg="#f44336", fg="white").pack(side="right", padx=20)
-        elif current_status == "rejected":
+        elif current_status == SubmissionStatus.REJECTED:
             tk.Label(btn_frame, text="当前状态: 已拒绝", fg="#f44336", font=("Arial", 10)).pack(side="left", padx=20)
             tk.Button(btn_frame, text="重新批准", command=do_approve, bg="#4CAF50", fg="white").pack(side="right", padx=20)
         else:
@@ -272,7 +250,7 @@ class AdminWindow:
         item = self.submissions_tree.item(selection[0])
         sub_id = item['tags'][0]
         if messagebox.askyesno("确认", "确定批准该提交吗？"):
-            if self.db.update_submission_status(sub_id, "approved"):
+            if self.submission_service.approve_submission(sub_id):
                 messagebox.showinfo("成功", "已批准")
                 self.refresh_submissions()
             else:
@@ -285,7 +263,7 @@ class AdminWindow:
         item = self.submissions_tree.item(selection[0])
         sub_id = item['tags'][0]
         if messagebox.askyesno("确认", "确定拒绝该提交吗？"):
-            if self.db.update_submission_status(sub_id, "rejected"):
+            if self.submission_service.reject_submission(sub_id):
                 messagebox.showinfo("成功", "已拒绝")
                 self.refresh_submissions()
             else:
@@ -295,11 +273,11 @@ class AdminWindow:
         """刷新提交审核列表"""
         for item in self.submissions_tree.get_children():
             self.submissions_tree.delete(item)
-        submissions = self.db.get_all_submissions()
+        submissions = self.submission_service.get_all_submissions()
         for sub in submissions:
             time_str = sub['created_at'].strftime("%Y-%m-%d %H:%M") if sub['created_at'] else "未知"
             status = sub['status']
-            # 区分公告和普通提交，虽然都在一个表，但可以在显示上做区分
+            # 区分公告和普通提交
             is_ann = sub.get('is_announcement', False)
             display_title = f"[公告] {sub['title']}" if is_ann else sub['title']
             
@@ -347,63 +325,37 @@ class AdminWindow:
         
         self.refresh_users()
     
-    def setup_stats_tab(self, parent):
-        stats = self.db.get_stats() or {}
-        stats_frame = tk.Frame(parent, bg="#f5f5f5")
-        stats_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        self.create_stat_card(stats_frame, "总用户数", stats.get("users", 0), 0, 0, "#2196F3")
-        self.create_stat_card(stats_frame, "总提交数", stats.get("submissions", 0), 0, 1, "#4CAF50")
-        self.create_stat_card(stats_frame, "待审核", stats.get("pending", 0), 1, 0, "#FF9800")
-    
-    def create_stat_card(self, parent, title, value, row, col, color):
-        card = tk.Frame(parent, bg=color, width=200, height=120)
-        card.grid(row=row, column=col, padx=10, pady=10)
-        card.grid_propagate(False)
-        tk.Label(card, text=title, font=("Arial", 12), bg=color, fg="white").pack(pady=(20,5))
-        tk.Label(card, text=str(value), font=("Arial", 24, "bold"), bg=color, fg="white").pack()
-    
     def refresh_users(self):
         for item in self.users_tree.get_children():
             self.users_tree.delete(item)
-        users = self.db.get_all_users()
+        users = self.user_service.get_all_users()
         
         # 获取当前登录用户是否为初始管理员
-        # 修改: 使用 UserModel.INITIAL_ADMIN_USERNAME
-        is_initial_admin = (self.admin['username'] == UserModel.INITIAL_ADMIN_USERNAME)
+        is_initial_admin = (self.admin['username'] == InitialAdmin.USERNAME)
         
         for user in users:
             reg_time = user['created_at'].strftime("%Y-%m-%d %H:%M") if user.get('created_at') else "未知"
             status = "活跃" if user.get('is_active', True) else "禁用"
-            role = user.get('role', 'user')
+            role = user.get('role', UserRole.USER)
             username = user['username']
             
             action_text = "管理"
             
-            # 逻辑修改：
-            # 1. 如果是本人，不可操作
+            # 逻辑简化：视图层只负责显示状态，具体权限由 Service 控制或在点击时校验
+            # 这里保留简单的视觉提示，但实际操作由 Service 决定
             if username == self.admin['username']:
                 action_text = "本人"
-            # 2. 如果是初始管理员，任何人不可操作 (包括他自己，防止误删/降级自己，虽然后端也限制了)
-            # 修改: 使用 UserModel.INITIAL_ADMIN_USERNAME
-            elif username == UserModel.INITIAL_ADMIN_USERNAME:
+            elif username == InitialAdmin.USERNAME:
                 action_text = "锁定"
-            # 3. 如果是其他管理员：
-            elif role == 'admin':
-                # 只有初始管理员可以管理其他管理员
-                if is_initial_admin:
-                    action_text = "管理"
-                else:
+            elif role == UserRole.ADMIN:
+                if not is_initial_admin:
                     action_text = "锁定"
-            # 4. 普通用户，始终可管理
-            else:
-                action_text = "管理"
-                
+            
             self.users_tree.insert(
                 "",
                 "end",
                 values=(username, user['email'], role, reg_time, status, action_text),
-                tags=(username,) # 将用户名存入 tags 方便获取
+                tags=(username,)
             )
 
     def on_user_manage_click(self, event):
@@ -414,23 +366,20 @@ class AdminWindow:
         
         item = self.users_tree.item(selection[0])
         target_username = item['tags'][0]
-        current_role = item['values'][2] # 角色列
-        action_text = item['values'][5] # 操作列文本
+        current_role = item['values'][2]
+        action_text = item['values'][5]
         
-        # 修改逻辑：如果是本人，允许打开管理窗口进行个人信息修改（但不允许改角色/删除自己）
-        # 如果是锁定（dpp被其他人看，或其他管理员被非dpp看），则禁止
         if action_text == "锁定":
             messagebox.showwarning("提示", f"无法操作该用户: 权限不足或受保护")
             return
             
-        # 打开管理窗口
         self.open_user_manage_dialog(target_username, current_role)
 
     def open_user_manage_dialog(self, username, current_role):
         """打开用户管理对话框"""
         dialog = tk.Toplevel(self.window)
         dialog.title(f"管理用户: {username}")
-        dialog.geometry("300x250") # 稍微调高一点以容纳更多信息
+        dialog.geometry("300x250")
         dialog.transient(self.window)
         dialog.grab_set()
         
@@ -441,14 +390,12 @@ class AdminWindow:
         btn_frame.pack(pady=10)
         
         is_self = (username == self.admin['username'])
-        # 修改: 使用 UserModel.INITIAL_ADMIN_USERNAME
-        is_initial_admin = (username == UserModel.INITIAL_ADMIN_USERNAME)
-        # 修改: 使用 UserModel.INITIAL_ADMIN_USERNAME
-        is_operator_initial_admin = (self.admin['username'] == UserModel.INITIAL_ADMIN_USERNAME)
+        is_initial_admin = (username == InitialAdmin.USERNAME)
+        is_operator_initial_admin = (self.admin['username'] == InitialAdmin.USERNAME)
 
         def do_promote():
             if messagebox.askyesno("确认", f"确定将 {username} 升级为管理员吗？"):
-                success, msg = self.db.update_user_role(username, "admin", self.admin['username'])
+                success, msg = self.user_service.update_role(self.admin['username'], username, UserRole.ADMIN)
                 messagebox.showinfo("结果", msg)
                 if success:
                     dialog.destroy()
@@ -456,7 +403,7 @@ class AdminWindow:
                     
         def do_demote():
             if messagebox.askyesno("确认", f"确定将 {username} 降级为普通用户吗？"):
-                success, msg = self.db.update_user_role(username, "user", self.admin['username'])
+                success, msg = self.user_service.update_role(self.admin['username'], username, UserRole.USER)
                 messagebox.showinfo("结果", msg)
                 if success:
                     dialog.destroy()
@@ -464,21 +411,23 @@ class AdminWindow:
                     
         def do_delete():
             if messagebox.askyesno("危险操作", f"确定要永久删除用户 {username} 吗？此操作不可恢复！"):
-                success, msg = self.db.delete_user(username, self.admin['username'])
+                success, msg = self.user_service.delete_user(self.admin['username'], username)
                 messagebox.showinfo("结果", msg)
                 if success:
                     dialog.destroy()
                     self.refresh_users()
         
         def do_edit_profile():
-            # 简单的编辑个人信息功能（仅邮箱）
             edit_win = tk.Toplevel(dialog)
             edit_win.title("编辑个人信息")
             edit_win.geometry("300x150")
             edit_win.transient(dialog)
             
             tk.Label(edit_win, text="邮箱:").pack(pady=5)
-            email_var = tk.StringVar(value=self.get_user_email(username))
+            # 注意：这里需要实现获取单个用户邮箱的方法，或者从当前列表获取
+            # 为简化，暂时假设只能查看，或后续在 UserService 增加 get_user_info
+            email_val = self.get_user_email(username) 
+            email_var = tk.StringVar(value=email_val)
             entry = tk.Entry(edit_win, textvariable=email_var, width=30)
             entry.pack(pady=5)
             
@@ -487,41 +436,28 @@ class AdminWindow:
                 if not new_email:
                     messagebox.showerror("错误", "邮箱不能为空")
                     return
-                # 这里需要实现更新邮箱的逻辑，暂时简化处理，仅提示
-                # 实际项目中应在 db.py 添加 update_user_email 方法
+                # TODO: 实现更新邮箱的服务方法
                 messagebox.showinfo("提示", "更新邮箱功能待实现（需后端支持）")
-                # 模拟更新成功关闭
-                # edit_win.destroy()
                 
             tk.Button(edit_win, text="保存", command=save_email).pack(pady=10)
 
-        # 辅助方法获取邮箱（需要查询数据库，因为 treeview 里可能有缓存或不全）
-        # 为了简化，我们假设刷新后数据是新的，或者直接从 treeview 取值（如果有的话）
-        # 这里为了代码简洁，暂不深入实现编辑邮箱，重点解决“页面没了”的误解，
-        # 实际上是通过增加“个人信息”Tab来解决。
-        
-        # 根据当前角色显示按钮
-        # 如果是本人，不显示角色变更和删除按钮，或者禁用
         if is_self:
              tk.Label(btn_frame, text="当前登录账号，无法更改角色或删除自己", fg="#666").pack(pady=5)
-             # 可以添加一个“修改密码”或“编辑资料”的按钮，这里简化为提示去个人信息页
              tk.Label(btn_frame, text="请前往【个人信息】标签页修改资料", fg="#2196F3").pack(pady=5)
         else:
-            if current_role == "user":
+            if current_role == UserRole.USER:
                 tk.Button(btn_frame, text="升级为管理员", command=do_promote, bg="#4CAF50", fg="white").pack(fill="x", padx=20, pady=5)
             
-            if current_role == "admin":
-                # 只有初始管理员可以管理其他管理员
+            if current_role == UserRole.ADMIN:
                 if is_operator_initial_admin and not is_initial_admin:
                      tk.Button(btn_frame, text="降级为普通用户", command=do_demote, bg="#FF9800", fg="white").pack(fill="x", padx=20, pady=5)
                 elif not is_operator_initial_admin:
                      tk.Label(btn_frame, text="仅初始管理员可操作其他管理员", fg="#999").pack(pady=5)
                 
-            # 删除按钮：不能删除自己，不能删除初始管理员，非初始管理员不能删除其他管理员
             can_delete = True
             if is_initial_admin:
                 can_delete = False
-            elif current_role == "admin" and not is_operator_initial_admin:
+            elif current_role == UserRole.ADMIN and not is_operator_initial_admin:
                 can_delete = False
             
             if can_delete:
@@ -532,8 +468,8 @@ class AdminWindow:
         tk.Button(dialog, text="关闭", command=dialog.destroy).pack(pady=10)
 
     def get_user_email(self, username):
-        # 简单辅助函数，实际应优化
-        user = self.db.db.users.find_one({"username": username})
+        # 修改：通过 UserService 获取用户信息，而不是直接操作 DB
+        user = self.user_service.get_user_by_username(username)
         return user.get('email', '') if user else ''
 
     def setup_profile_tab(self, parent):
@@ -541,37 +477,23 @@ class AdminWindow:
         info_frame = tk.Frame(parent, padx=30, pady=20)
         info_frame.pack(fill="both", expand=True)
         
-        # 头像占位
         tk.Label(info_frame, text="👤", font=("Arial", 48), bg="#e0e0e0", width=4, height=2).pack(pady=20)
         
-        # 获取最新数据
-        email = '加载中...'
-        reg_time = '加载中...'
-        role = '加载中...'
+        # 新增：通过 UserService 获取最新用户信息
+        current_user_data = self.user_service.get_user_by_username(self.admin['username'])
         
-        if self.db.is_connected:
-            try:
-                current_user_data = self.db.db.users.find_one({"username": self.admin['username']})
-                if current_user_data:
-                    email = current_user_data.get('email', '未设置')
-                    db_reg_time = current_user_data.get('created_at')
-                    reg_time = db_reg_time.strftime("%Y-%m-%d %H:%M") if db_reg_time else '未知'
-                    role = current_user_data.get('role', 'user')
-                else:
-                    # 降级使用内存对象
-                    email = self.admin.get('email', '未设置')
-                    mem_reg_time = self.admin.get('created_at')
-                    reg_time = mem_reg_time.strftime("%Y-%m-%d %H:%M") if mem_reg_time and mem_reg_time != '未知' else '未知'
-                    role = self.admin.get('role', 'user')
-            except Exception as e:
-                print(f"获取用户信息失败: {e}")
-                email = self.admin.get('email', '未设置')
-                role = self.admin.get('role', 'user')
+        if current_user_data:
+            email = current_user_data.get('email', '未设置')
+            db_reg_time = current_user_data.get('created_at')
+            reg_time = db_reg_time.strftime("%Y-%m-%d %H:%M") if db_reg_time else '未知'
+            role = current_user_data.get('role', UserRole.USER)
         else:
-             email = self.admin.get('email', '未设置')
-             role = self.admin.get('role', 'user')
+            # 降级方案：使用登录时缓存的信息
+            email = self.admin.get('email', '未设置')
+            mem_reg_time = self.admin.get('created_at')
+            reg_time = mem_reg_time.strftime("%Y-%m-%d %H:%M") if mem_reg_time and mem_reg_time != '未知' else '未知'
+            role = self.admin.get('role', UserRole.USER)
 
-        # 构建只读信息展示
         info_list = [
             ("用户名", self.admin['username']),
             ("邮箱", email),
