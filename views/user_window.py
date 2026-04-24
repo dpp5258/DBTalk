@@ -1,19 +1,16 @@
 import tkinter as tk
 from tkinter import messagebox, ttk, scrolledtext
-from models.constants import SubmissionStatus # 新增导入
-# 新增导入服务层
+from models.constants import SubmissionStatus
 from services.submission_service import SubmissionService
-# 新增：导入 UserService 用于修改个人信息
 from services.user_service import UserService
+from views.user_settings_window import UserSettingsWindow
 from bson import ObjectId
 
 class UserWindow:
     def __init__(self, root, user):
         self.root = root
         self.user = user
-        # 初始化服务层
         self.submission_service = SubmissionService()
-        # 新增：初始化用户服务
         self.user_service = UserService()
         
         self.window = tk.Toplevel(root)
@@ -21,8 +18,25 @@ class UserWindow:
         self.window.geometry("600x700")
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         
+        self.setup_menu() # 新增：初始化菜单
         self.setup_ui()
     
+    def setup_menu(self):
+        """设置顶部菜单栏"""
+        menubar = tk.Menu(self.window)
+        self.window.config(menu=menubar)
+        
+        # 设置菜单
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="设置", menu=settings_menu)
+        settings_menu.add_command(label="账号设置", command=self.open_settings)
+        settings_menu.add_separator()
+        settings_menu.add_command(label="登出", command=self.logout)
+
+    def open_settings(self):
+        """打开账号设置窗口"""
+        UserSettingsWindow(self.window, self.user, self.user_service)
+
     def setup_ui(self):
         welcome_frame = tk.Frame(self.window, bg="#e3f2fd", height=60)
         welcome_frame.pack(fill="x")
@@ -32,15 +46,8 @@ class UserWindow:
             font=("Arial", 14, "bold"),
             bg="#e3f2fd"
         ).pack(side="left", padx=20, pady=15)
-        tk.Button(
-            welcome_frame,
-            text="登出",
-            command=self.logout,
-            bg="#f44336",
-            fg="white",
-            font=("Arial", 10),
-            width=8
-        ).pack(side="right", padx=20, pady=15)
+        
+        # 移除原 welcome_frame 右侧的登出按钮，因为现在菜单里有登出
         
         notebook = ttk.Notebook(self.window)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
@@ -246,7 +253,6 @@ class UserWindow:
         tk.Label(info_frame, text=self.user['username'], font=("Arial", 11)).pack(anchor="w", pady=(0,10))
         
         tk.Label(info_frame, text="邮箱:", font=("Arial", 11, "bold")).pack(anchor="w")
-        # 动态获取最新邮箱，防止缓存不一致
         current_user_data = self.user_service.get_user_by_username(self.user['username'])
         email_display = current_user_data.get('email', '未设置') if current_user_data else self.user.get('email', '未设置')
         self.email_label = tk.Label(info_frame, text=email_display, font=("Arial", 11))
@@ -258,106 +264,9 @@ class UserWindow:
             reg_time = reg_time.strftime("%Y-%m-%d %H:%M")
         tk.Label(info_frame, text=reg_time, font=("Arial", 11)).pack(anchor="w")
 
-        # 新增：操作按钮区域
-        btn_frame = tk.Frame(info_frame, pady=20)
-        btn_frame.pack(fill="x")
-        
-        tk.Button(
-            btn_frame, 
-            text="修改邮箱", 
-            command=self.open_change_email_dialog,
-            bg="#2196F3", 
-            fg="white",
-            font=("Arial", 10),
-            width=12
-        ).pack(side="left", padx=10, expand=True)
-        
-        tk.Button(
-            btn_frame, 
-            text="修改密码", 
-            command=self.open_change_password_dialog,
-            bg="#FF9800", 
-            fg="white",
-            font=("Arial", 10),
-            width=12
-        ).pack(side="right", padx=10, expand=True)
-
-    def open_change_email_dialog(self):
-        """打开修改邮箱对话框"""
-        dialog = tk.Toplevel(self.window)
-        dialog.title("修改邮箱")
-        dialog.geometry("300x150")
-        dialog.transient(self.window)
-        dialog.grab_set()
-        
-        tk.Label(dialog, text="新邮箱:", font=("Arial", 10)).pack(pady=5)
-        # 获取当前邮箱作为默认值
-        current_email = self.user_service.get_user_by_username(self.user['username'])
-        initial_email = current_email.get('email', '') if current_email else ''
-        
-        email_var = tk.StringVar(value=initial_email)
-        entry = tk.Entry(dialog, textvariable=email_var, width=30)
-        entry.pack(pady=5)
-        
-        def save_email():
-            new_email = email_var.get().strip()
-            # 调用后端服务修改邮箱
-            success, msg = self.user_service.update_email(
-                operator_username=self.user['username'], 
-                target_username=self.user['username'], 
-                new_email=new_email
-            )
-            messagebox.showinfo("结果", msg)
-            if success:
-                # 更新本地显示
-                self.email_label.config(text=new_email)
-                dialog.destroy()
-                
-        tk.Button(dialog, text="保存", command=save_email, bg="#4CAF50", fg="white").pack(pady=10)
-
-    def open_change_password_dialog(self):
-        """打开修改密码对话框"""
-        dialog = tk.Toplevel(self.window)
-        dialog.title("修改密码")
-        dialog.geometry("300x200")
-        dialog.transient(self.window)
-        dialog.grab_set()
-        
-        tk.Label(dialog, text="新密码:", font=("Arial", 10)).pack(pady=2)
-        pwd_var = tk.StringVar()
-        pwd_entry = tk.Entry(dialog, textvariable=pwd_var, show="*", width=30)
-        pwd_entry.pack(pady=2)
-        
-        tk.Label(dialog, text="确认密码:", font=("Arial", 10)).pack(pady=2)
-        confirm_pwd_var = tk.StringVar()
-        confirm_entry = tk.Entry(dialog, textvariable=confirm_pwd_var, show="*", width=30)
-        confirm_entry.pack(pady=2)
-        
-        def save_password():
-            pwd = pwd_var.get()
-            confirm_pwd = confirm_pwd_var.get()
-            if pwd != confirm_pwd:
-                messagebox.showerror("错误", "两次输入的密码不一致")
-                return
-            if not pwd or len(pwd) < 6:
-                messagebox.showerror("错误", "密码长度至少为6位")
-                return
-                
-            # 注意：这里的 reset_password 在服务层被设计为管理员重置或本人修改。
-            # 由于我们是在本人登录状态下操作，且 service 层目前主要校验目标用户权限，
-            # 这里直接调用 reset_password 即可实现“修改”效果（覆盖旧密码）。
-            # 如果需要验证旧密码，需在 service 层增加 verify_old_password 逻辑，
-            # 但根据之前提供的 service 代码，reset_password 是直接覆盖。
-            success, msg = self.user_service.reset_password(
-                operator_username=self.user['username'], 
-                target_username=self.user['username'], 
-                new_password=pwd
-            )
-            messagebox.showinfo("结果", msg)
-            if success:
-                dialog.destroy()
-                
-        tk.Button(dialog, text="确认修改", command=save_password, bg="#FF9800", fg="white").pack(pady=10)
+        # 移除原有的 btn_frame 和修改按钮，引导用户去菜单设置
+        tip_label = tk.Label(info_frame, text="💡 提示：如需修改邮箱或密码，请点击顶部菜单【设置】->【账号设置】", fg="#666", font=("Arial", 9))
+        tip_label.pack(pady=20)
 
     def submit_text(self):
         title = self.title_entry.get()
