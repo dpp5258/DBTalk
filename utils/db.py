@@ -148,3 +148,12 @@ class Database:
             "submissions": self.db.submissions.count_documents({}),
             "pending": self.db.submissions.count_documents({"status": "pending"})
         }
+
+    def get_approved_submissions(self):
+        """获取所有已批准且非公告的提交（用于交流广场）"""
+        if not self.is_connected:
+            return []
+        # 排除公告 (is_announcement != True) 且状态为 approved
+        return list(self.db.submissions.find(
+            {"status": "approved", "is_announcement": {"$ne": True}}
+        ).sort("created_at", -1))

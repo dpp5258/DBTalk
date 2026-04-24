@@ -50,6 +50,11 @@ class UserWindow:
         notebook.add(history_tab, text="提交历史")
         self.setup_history_tab(history_tab)
         
+        # 交流广场标签页 (新增)
+        community_tab = tk.Frame(notebook)
+        notebook.add(community_tab, text="交流广场")
+        self.setup_community_tab(community_tab)
+        
         # 个人信息标签页
         profile_tab = tk.Frame(notebook)
         notebook.add(profile_tab, text="个人信息")
@@ -110,7 +115,107 @@ class UserWindow:
             font=("Arial", 10)
         ).pack(pady=10)
         self.refresh_history()
-    
+
+    def setup_community_tab(self, parent):
+        """设置交流广场界面"""
+        toolbar = tk.Frame(parent, bg="#f0f0f0", height=40)
+        toolbar.pack(fill="x", pady=5)
+        tk.Label(toolbar, text="公开交流内容 (已批准)", font=("Arial", 12, "bold")).pack(side="left", padx=10)
+        tk.Button(
+            toolbar,
+            text="刷新",
+            command=self.refresh_community,
+            bg="#2196F3",
+            fg="white"
+        ).pack(side="right", padx=10)
+        
+        columns = ("时间", "作者", "标题")
+        self.community_tree = ttk.Treeview(parent, columns=columns, show="headings", height=15)
+        self.community_tree.heading("时间", text="发布时间")
+        self.community_tree.heading("作者", text="作者")
+        self.community_tree.heading("标题", text="标题")
+        self.community_tree.column("时间", width=150)
+        self.community_tree.column("作者", width=100)
+        self.community_tree.column("标题", width=300)
+        
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=self.community_tree.yview)
+        self.community_tree.configure(yscrollcommand=scrollbar.set)
+        self.community_tree.pack(side="left", fill="both", expand=True, padx=(10,0), pady=10)
+        scrollbar.pack(side="right", fill="y", pady=10)
+        
+        # 绑定双击事件查看详情
+        self.community_tree.bind('<Double-Button-1>', self.on_community_item_double_click)
+        
+        self.refresh_community()
+
+    def refresh_community(self):
+        """刷新交流广场列表"""
+        for item in self.community_tree.get_children():
+            self.community_tree.delete(item)
+        
+        submissions = self.db.get_approved_submissions()
+        if not submissions:
+            self.community_tree.insert("", "end", values=("暂无公开内容", "", ""))
+        else:
+            for sub in submissions:
+                time_str = sub['created_at'].strftime("%Y-%m-%d %H:%M") if sub['created_at'] else "未知"
+                self.community_tree.insert(
+                    "", 
+                    "end", 
+                    values=(time_str, sub['username'], sub['title']),
+                    tags=(str(sub['_id']),) # 存储ID以便查看详情
+                )
+
+    def on_community_item_double_click(self, event):
+        """双击查看交流内容详情"""
+        selection = self.community_tree.selection()
+        if not selection:
+            return
+        
+        item = self.community_tree.item(selection[0])
+        sub_id = item['tags'][0]
+        
+        # 从数据库获取详细内容
+        if not self.db.is_connected:
+            messagebox.showerror("错误", "数据库未连接")
+            return
+            
+        try:
+            from bson.objectid import ObjectId
+            sub_doc = self.db.db.submissions.find_one({"_id": ObjectId(sub_id)})
+            if sub_doc:
+                self.show_content_dialog(sub_doc['title'], sub_doc['content'], sub_doc['username'])
+            else:
+                messagebox.showwarning("提示", "内容不存在或已被删除")
+        except Exception as e:
+            messagebox.showerror("错误", f"加载详情失败: {str(e)}")
+
+    def show_content_dialog(self, title, content, author):
+        """显示内容详情弹窗"""
+        dialog = tk.Toplevel(self.window)
+        dialog.title(f"查看内容 - {title}")
+        dialog.geometry("500x400")
+        dialog.transient(self.window)
+        dialog.grab_set()
+        
+        header_frame = tk.Frame(dialog, bg="#e3f2fd", pady=10)
+        header_frame.pack(fill="x")
+        tk.Label(header_frame, text=title, font=("Arial", 14, "bold"), bg="#e3f2fd").pack()
+        tk.Label(header_frame, text=f"作者: {author}", font=("Arial", 10), bg="#e3f2fd", fg="#666").pack()
+        
+        content_frame = tk.Frame(dialog, padx=10, pady=10)
+        content_frame.pack(fill="both", expand=True)
+        
+        text_widget = scrolledtext.ScrolledText(content_frame, font=("Arial", 11), wrap=tk.WORD, state="disabled")
+        text_widget.pack(fill="both", expand=True)
+        
+        # 插入内容并设置为只读
+        text_widget.config(state="normal")
+        text_widget.insert("1.0", content)
+        text_widget.config(state="disabled")
+        
+        tk.Button(dialog, text="关闭", command=dialog.destroy, bg="#f44336", fg="white").pack(pady=10)
+
     def setup_profile_tab(self, parent):
         info_frame = tk.Frame(parent, padx=30, pady=20)
         info_frame.pack(fill="both", expand=True)

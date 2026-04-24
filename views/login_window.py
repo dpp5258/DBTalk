@@ -6,6 +6,7 @@ from views.admin_window import AdminWindow
 from views.settings_window import SettingsWindow
 from datetime import datetime
 
+
 class LoginWindow:
     def __init__(self, root):
         self.root = root
