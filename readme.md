@@ -1,8 +1,6 @@
-# 文本提交系统
+# DBTalk - 文本提交与管理系统
 
-基于 Python + Tkinter + MongoDB Atlas 的桌面应用程序，提供用户注册登录、文本提交、管理员审核等核心功能。
-
----
+DBTalk 是一个基于 Python Tkinter 和 MongoDB Atlas 的桌面端文本提交与管理应用。它支持用户注册登录、文本提交、管理员审核、公告发布以及公开交流广场等功能。
 
 ## 📁 项目结构
 
