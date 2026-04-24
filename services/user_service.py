@@ -99,3 +99,75 @@ class UserService:
             return user
         except Exception:
             return None
+
+    def update_email(self, operator_username: str, target_username: str, new_email: str) -> tuple:
+        """
+        更新用户邮箱
+        :param operator_username: 操作者用户名
+        :param target_username: 目标用户名
+        :param new_email: 新邮箱
+        :return: (success: bool, message: str)
+        """
+        if not self.db.is_connected:
+            return False, "数据库未连接"
+        
+        # 简单权限校验：不能修改初始管理员的核心信息（可选，这里仅做基本保护）
+        if target_username == InitialAdmin.USERNAME and operator_username != InitialAdmin.USERNAME:
+             return False, "权限不足：仅初始管理员可修改自身信息"
+
+        if not new_email or "@" not in new_email:
+            return False, "邮箱格式不正确"
+
+        try:
+            result = self.db.db.users.update_one(
+                {"username": target_username},
+                {"$set": {"email": new_email}}
+            )
+            if result.modified_count > 0:
+                return True, "邮箱更新成功"
+            else:
+                # 检查用户是否存在
+                if self.db.db.users.find_one({"username": target_username}):
+                    return True, "邮箱未变更"
+                return False, "用户不存在"
+        except Exception as e:
+            return False, f"更新失败: {str(e)}"
+
+    def reset_password(self, operator_username: str, target_username: str, new_password: str) -> tuple:
+        """
+        重置用户密码（通常由管理员执行，或用户本人通过旧密码验证后执行）
+        此处实现为管理员直接重置
+        :param operator_username: 操作者用户名
+        :param target_username: 目标用户名
+        :param new_password: 新明文密码
+        :return: (success: bool, message: str)
+        """
+        if not self.db.is_connected:
+            return False, "数据库未连接"
+        
+        # 权限校验：同删除/角色修改逻辑
+        is_initial_admin = (operator_username == InitialAdmin.USERNAME)
+        target_is_initial_admin = (target_username == InitialAdmin.USERNAME)
+        
+        if target_is_initial_admin and not is_initial_admin:
+            return False, "权限不足：仅初始管理员可重置初始管理员密码"
+            
+        if not new_password or len(new_password) < 6:
+            return False, "密码长度至少为6位"
+
+        try:
+            from services.auth_service import AuthService
+            hashed_pwd = AuthService.hash_password(new_password)
+            
+            result = self.db.db.users.update_one(
+                {"username": target_username},
+                {"$set": {"password": hashed_pwd}}
+            )
+            if result.modified_count > 0:
+                return True, "密码重置成功"
+            else:
+                if self.db.db.users.find_one({"username": target_username}):
+                    return True, "密码未变更"
+                return False, "用户不存在"
+        except Exception as e:
+            return False, f"重置失败: {str(e)}"

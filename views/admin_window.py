@@ -379,7 +379,7 @@ class AdminWindow:
         """打开用户管理对话框"""
         dialog = tk.Toplevel(self.window)
         dialog.title(f"管理用户: {username}")
-        dialog.geometry("300x250")
+        dialog.geometry("350x350") # 调整大小以容纳新按钮
         dialog.transient(self.window)
         dialog.grab_set()
         
@@ -417,43 +417,85 @@ class AdminWindow:
                     dialog.destroy()
                     self.refresh_users()
         
-        def do_edit_profile():
+        def do_edit_email():
+            # 获取当前邮箱
+            current_email = self.get_user_email(username)
             edit_win = tk.Toplevel(dialog)
-            edit_win.title("编辑个人信息")
+            edit_win.title("修改邮箱")
             edit_win.geometry("300x150")
             edit_win.transient(dialog)
+            edit_win.grab_set()
             
-            tk.Label(edit_win, text="邮箱:").pack(pady=5)
-            # 注意：这里需要实现获取单个用户邮箱的方法，或者从当前列表获取
-            # 为简化，暂时假设只能查看，或后续在 UserService 增加 get_user_info
-            email_val = self.get_user_email(username) 
-            email_var = tk.StringVar(value=email_val)
+            tk.Label(edit_win, text="新邮箱:", font=("Arial", 10)).pack(pady=5)
+            email_var = tk.StringVar(value=current_email)
             entry = tk.Entry(edit_win, textvariable=email_var, width=30)
             entry.pack(pady=5)
             
             def save_email():
-                new_email = email_var.get()
-                if not new_email:
-                    messagebox.showerror("错误", "邮箱不能为空")
+                new_email = email_var.get().strip()
+                success, msg = self.user_service.update_email(self.admin['username'], username, new_email)
+                messagebox.showinfo("结果", msg)
+                if success:
+                    edit_win.destroy()
+                    # 刷新主列表以显示新邮箱（如果需要）
+                    self.refresh_users()
+                    
+            tk.Button(edit_win, text="保存", command=save_email, bg="#4CAF50", fg="white").pack(pady=10)
+
+        def do_reset_password():
+            reset_win = tk.Toplevel(dialog)
+            reset_win.title("重置密码")
+            reset_win.geometry("300x180")
+            reset_win.transient(dialog)
+            reset_win.grab_set()
+            
+            tk.Label(reset_win, text=f"为用户 [{username}] 设置新密码", font=("Arial", 10)).pack(pady=5)
+            tk.Label(reset_win, text="新密码:", font=("Arial", 10)).pack(pady=2)
+            pwd_var = tk.StringVar()
+            pwd_entry = tk.Entry(reset_win, textvariable=pwd_var, show="*", width=30)
+            pwd_entry.pack(pady=2)
+            
+            tk.Label(reset_win, text="确认密码:", font=("Arial", 10)).pack(pady=2)
+            confirm_pwd_var = tk.StringVar()
+            confirm_entry = tk.Entry(reset_win, textvariable=confirm_pwd_var, show="*", width=30)
+            confirm_entry.pack(pady=2)
+            
+            def save_password():
+                pwd = pwd_var.get()
+                confirm_pwd = confirm_pwd_var.get()
+                if pwd != confirm_pwd:
+                    messagebox.showerror("错误", "两次输入的密码不一致")
                     return
-                # TODO: 实现更新邮箱的服务方法
-                messagebox.showinfo("提示", "更新邮箱功能待实现（需后端支持）")
-                
-            tk.Button(edit_win, text="保存", command=save_email).pack(pady=10)
+                if not pwd:
+                    messagebox.showerror("错误", "密码不能为空")
+                    return
+                    
+                success, msg = self.user_service.reset_password(self.admin['username'], username, pwd)
+                messagebox.showinfo("结果", msg)
+                if success:
+                    reset_win.destroy()
+                    
+            tk.Button(reset_win, text="确认重置", command=save_password, bg="#FF9800", fg="white").pack(pady=10)
 
         if is_self:
              tk.Label(btn_frame, text="当前登录账号，无法更改角色或删除自己", fg="#666").pack(pady=5)
-             tk.Label(btn_frame, text="请前往【个人信息】标签页修改资料", fg="#2196F3").pack(pady=5)
+             # 允许自己修改邮箱和密码
+             tk.Button(btn_frame, text="修改我的邮箱", command=do_edit_email, bg="#2196F3", fg="white").pack(fill="x", padx=20, pady=2)
+             tk.Button(btn_frame, text="修改我的密码", command=do_reset_password, bg="#2196F3", fg="white").pack(fill="x", padx=20, pady=2)
         else:
             if current_role == UserRole.USER:
-                tk.Button(btn_frame, text="升级为管理员", command=do_promote, bg="#4CAF50", fg="white").pack(fill="x", padx=20, pady=5)
+                tk.Button(btn_frame, text="升级为管理员", command=do_promote, bg="#4CAF50", fg="white").pack(fill="x", padx=20, pady=2)
             
             if current_role == UserRole.ADMIN:
                 if is_operator_initial_admin and not is_initial_admin:
-                     tk.Button(btn_frame, text="降级为普通用户", command=do_demote, bg="#FF9800", fg="white").pack(fill="x", padx=20, pady=5)
+                     tk.Button(btn_frame, text="降级为普通用户", command=do_demote, bg="#FF9800", fg="white").pack(fill="x", padx=20, pady=2)
                 elif not is_operator_initial_admin:
-                     tk.Label(btn_frame, text="仅初始管理员可操作其他管理员", fg="#999").pack(pady=5)
+                     tk.Label(btn_frame, text="仅初始管理员可操作其他管理员", fg="#999").pack(pady=2)
                 
+            # 管理员可以修改其他用户的邮箱和密码
+            tk.Button(btn_frame, text="修改用户邮箱", command=do_edit_email, bg="#2196F3", fg="white").pack(fill="x", padx=20, pady=2)
+            tk.Button(btn_frame, text="重置用户密码", command=do_reset_password, bg="#FF9800", fg="white").pack(fill="x", padx=20, pady=2)
+
             can_delete = True
             if is_initial_admin:
                 can_delete = False
@@ -461,9 +503,9 @@ class AdminWindow:
                 can_delete = False
             
             if can_delete:
-                tk.Button(btn_frame, text="删除用户", command=do_delete, bg="#f44336", fg="white").pack(fill="x", padx=20, pady=5)
+                tk.Button(btn_frame, text="删除用户", command=do_delete, bg="#f44336", fg="white").pack(fill="x", padx=20, pady=2)
             else:
-                 tk.Label(btn_frame, text="无权删除该用户", fg="#999").pack(pady=5)
+                 tk.Label(btn_frame, text="无权删除该用户", fg="#999").pack(pady=2)
         
         tk.Button(dialog, text="关闭", command=dialog.destroy).pack(pady=10)
 

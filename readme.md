@@ -50,7 +50,8 @@ DBTalk/
 ---
 ```
 链接：
-mongodb+srv://dpp:dpp5258@cluster0.75iw89g.mongodb.net/
+mongodb+srv://<your_username>:<your_password>@cluster0.xxxxx.mongodb.net/
+
 dpp
 dpp5258
 {
