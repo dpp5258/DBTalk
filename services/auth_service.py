@@ -74,11 +74,8 @@ class AuthService:
                 "email": email,
                 "role": role,
                 "is_active": True,
-                "created_at": self.db.db.command('eval', 'new Date()') # 简单获取服务器时间，或使用 python datetime
+                "created_at": datetime.now()
             }
-            # 修正：使用 python datetime 更稳妥
-            from datetime import datetime
-            user_doc['created_at'] = datetime.now()
             
             self.db.db.users.insert_one(user_doc)
             return True, "注册成功"
