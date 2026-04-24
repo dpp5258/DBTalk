@@ -1,5 +1,6 @@
 pymongo
 python-dotenv
 cryptography
-tkinter
+PyQt6
 Pillow
+pygame

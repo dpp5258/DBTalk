@@ -1,317 +1,274 @@
-import tkinter as tk
-from tkinter import messagebox, filedialog
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+from PIL import Image, ImageQt
 import os
 import json
 from utils.music_manager import MusicManager
 from datetime import datetime
-# 新增：导入 Pillow 用于图像处理
-from PIL import Image, ImageTk
 
-class UserSettingsWindow:
+class UserSettingsWindow(QDialog):
     def __init__(self, parent, user, user_service):
+        super().__init__(parent)
         self.parent = parent
         self.user = user
         self.user_service = user_service
         self.music_manager = MusicManager()
-        
-        self.window = tk.Toplevel(parent)
-        self.window.title("账号设置")
-        # 修改2：将账号设置窗口改为可伸缩窗口
-        self.window.geometry("800x750")
-        self.window.resizable(True, True) 
-        self.window.transient(parent)
-        self.window.grab_set()
-        
-        # 用于存储头像图片对象，防止被垃圾回收
-        self.avatar_image_obj = None
-        
+
+        self.setWindowTitle("账号设置")
+        self.resize(800, 750)
+        self.setMinimumSize(600, 600)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+
+        self.avatar_pixmap = None
+
         self.setup_ui()
 
     def toggle_music(self):
-        """切换音乐状态"""
-        is_on = self.music_var.get()
+        is_on = self.music_switch.isChecked()
         self.music_manager.set_enabled(is_on)
 
     def backup_data(self):
-        """执行本地数据备份"""
         try:
-            # 1. 确定备份根目录
-            # 优先尝试 D 盘，如果不存在则使用用户主目录
             backup_root = "D:\\DBTalk_Backups"
             if not os.path.exists("D:\\"):
                 backup_root = os.path.join(os.path.expanduser("~"), "DBTalk_Backups")
-            
-            # 2. 创建用户专属文件夹
+
             user_backup_dir = os.path.join(backup_root, self.user['username'])
             os.makedirs(user_backup_dir, exist_ok=True)
-            
-            # 3. 获取数据
-            messagebox.showinfo("提示", "正在从云端拉取数据...")
-            self.window.update() # 刷新UI显示消息
-            
+
+            QMessageBox.information(self, "提示", "正在从云端拉取数据...")
+            QApplication.processEvents()
+
             backup_data = self.user_service.get_user_backup_data(self.user['username'])
-            
-            # 4. 生成文件名 (带时间戳)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"backup_{timestamp}.json"
             filepath = os.path.join(user_backup_dir, filename)
-            
-            # 5. 写入 JSON 文件
+
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(backup_data, f, ensure_ascii=False, indent=4)
-                
-            messagebox.showinfo("成功", f"数据备份成功！\n保存位置:\n{filepath}")
-            
+
+            QMessageBox.information(self, "成功", f"数据备份成功！\n保存位置:\n{filepath}")
+
         except Exception as e:
-            messagebox.showerror("备份失败", f"发生错误: {str(e)}")
+            QMessageBox.critical(self, "备份失败", f"发生错误: {str(e)}")
 
     def change_avatar(self):
-        """选择并预览头像"""
-        file_path = filedialog.askopenfilename(
-            title="选择头像图片",
-            filetypes=[("Image Files", "*.jpg *.jpeg *.png *.webp")]
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择头像图片", "",
+            "Image Files (*.jpg *.jpeg *.png *.webp)"
         )
-        
         if not file_path:
             return
-        
+
         try:
-            # 1. 打开图片
             img = Image.open(file_path)
-            
-            # 2. 转换为 RGB (处理 PNG 透明通道等)
             if img.mode != 'RGB':
                 img = img.convert('RGB')
-            
-            # 3. 裁剪为正方形 (居中裁剪)
+
             width, height = img.size
             min_dim = min(width, height)
-            left = (width - min_dim) / 2
-            top = (height - min_dim) / 2
-            right = (width + min_dim) / 2
-            bottom = (height + min_dim) / 2
+            left = (width - min_dim) // 2
+            top = (height - min_dim) // 2
+            right = left + min_dim
+            bottom = top + min_dim
             img_cropped = img.crop((left, top, right, bottom))
-            
-            # 4. Resize 到目标大小 (2000x2000 用于存储，保证高清)
             img_final = img_cropped.resize((2000, 2000), Image.LANCZOS)
-            
-            # 5. 弹出预览窗口
+
             self.show_preview_dialog(img_final)
-                
+
         except Exception as e:
-            messagebox.showerror("错误", f"处理图片失败: {str(e)}")
+            QMessageBox.critical(self, "错误", f"处理图片失败: {str(e)}")
 
     def show_preview_dialog(self, img_final):
-        """显示头像预览对话框"""
-        preview_win = tk.Toplevel(self.window)
-        preview_win.title("头像预览")
-        preview_win.geometry("400x450")
-        preview_win.transient(self.window)
-        preview_win.grab_set()
-        
-        tk.Label(preview_win, text="请确认头像效果", font=("Arial", 12, "bold")).pack(pady=10)
-        
-        # 创建一个较大的预览图 (例如放大到 300x300 显示，更清晰)
+        preview = QDialog(self)
+        preview.setWindowTitle("头像预览")
+        preview.resize(400, 450)
+        preview.setMinimumSize(300, 350)
+        preview.setWindowModality(Qt.WindowModality.WindowModal)
+
+        layout = QVBoxLayout(preview)
+        layout.addWidget(QLabel("请确认头像效果"), alignment=Qt.AlignmentFlag.AlignCenter)
+
         img_preview = img_final.resize((300, 300), Image.LANCZOS)
-        
-        photo = ImageTk.PhotoImage(img_preview)
-        label = tk.Label(preview_win, image=photo)
-        label.image = photo # 保持引用
-        label.pack(pady=10)
-        
-        btn_frame = tk.Frame(preview_win)
-        btn_frame.pack(pady=20)
-        
+        qt_img = ImageQt.toqpixmap(img_preview)
+
+        label = QLabel()
+        label.setPixmap(qt_img)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
+
+        btn_layout = QHBoxLayout()
+
         def confirm_upload():
-            """确认上传"""
             try:
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 avatar_dir = os.path.join(project_root, "avatars")
                 os.makedirs(avatar_dir, exist_ok=True)
-                
                 filename = f"{self.user['username']}.jpg"
                 save_path = os.path.join(avatar_dir, filename)
-                
-                # 保存为 JPG
-                img_final.save(save_path, "JPEG", quality=90) # 提高质量
-                
-                relative_path = os.path.join("avatars", filename)
-                success, msg = self.user_service.update_avatar(self.user['username'], relative_path)
-                
-                if success:
-                    messagebox.showinfo("成功", "头像修改成功！")
-                    # 更新设置界面的预览
+                img_final.save(save_path, "JPEG", quality=90)
+
+                rel_path = os.path.join("avatars", filename)
+                ok, msg = self.user_service.update_avatar(self.user['username'], rel_path)
+                if ok:
+                    QMessageBox.information(preview, "成功", "头像修改成功！")
                     self.load_and_display_avatar(save_path)
-                    # 通知父窗口刷新
                     if hasattr(self.parent, 'refresh_avatar'):
                         self.parent.refresh_avatar()
-                    preview_win.destroy()
+                    preview.accept()
                 else:
-                    messagebox.showerror("错误", msg)
+                    QMessageBox.critical(preview, "错误", msg)
             except Exception as e:
-                messagebox.showerror("错误", f"保存失败: {str(e)}")
+                QMessageBox.critical(preview, "错误", f"保存失败: {str(e)}")
 
-        def cancel_upload():
-            preview_win.destroy()
+        confirm_btn = QPushButton("确认使用")
+        confirm_btn.setStyleSheet("background:#4CAF50; color:white;")
+        confirm_btn.clicked.connect(confirm_upload)
 
-        tk.Button(btn_frame, text="确认使用", command=confirm_upload, bg="#4CAF50", fg="white", font=("Arial", 10), width=10).pack(side="left", padx=10)
-        tk.Button(btn_frame, text="取消", command=cancel_upload, bg="#f44336", fg="white", font=("Arial", 10), width=10).pack(side="left", padx=10)
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setStyleSheet("background:#f44336; color:white;")
+        cancel_btn.clicked.connect(preview.close)
 
-    def load_and_display_avatar(self, image_path):
-        """加载并显示头像预览"""
+        btn_layout.addWidget(confirm_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+        preview.exec()
+
+    def load_and_display_avatar(self, path):
+        if not os.path.exists(path):
+            return
         try:
-            if os.path.exists(image_path):
-                img = Image.open(image_path)
-                # 调整为适合显示的大小，例如 400x400 (增大显示尺寸)
-                img = img.resize((400, 400), Image.LANCZOS)
-                self.avatar_image_obj = ImageTk.PhotoImage(img)
-
-                # 如果已有标签则配置，否则创建（这里假设在 setup_ui 中已经创建了 self.avatar_label）
-                if hasattr(self, 'avatar_label'):
-                    self.avatar_label.config(image=self.avatar_image_obj)
-            else:
-                # 显示默认占位图或清空
-                pass
-        except Exception as e:
-            print(f"加载头像预览失败: {e}")
+            img = Image.open(path)
+            img = img.resize((400, 400), Image.LANCZOS)
+            self.avatar_pixmap = ImageQt.toqpixmap(img)
+            self.avatar_label.setPixmap(self.avatar_pixmap)
+        except:
+            pass
 
     def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 15, 20, 10)
+        layout.setSpacing(10)
+
         # 标题
-        tk.Label(self.window, text="账号安全设置", font=("Arial", 14, "bold")).pack(pady=15)
-        
-        # 分隔线
-        tk.Frame(self.window, height=2, bg="#ddd").pack(fill="x", padx=20)
+        title = QLabel("账号安全设置")
+        title.setStyleSheet("font-size:14px; font-weight:bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
 
-        # 新增：头像设置区域
-        avatar_frame = tk.Frame(self.window, padx=20, pady=10)
-        avatar_frame.pack(fill="x")
-        tk.Label(avatar_frame, text="个人头像", font=("Arial", 11, "bold")).pack(anchor="w")
-        tk.Label(avatar_frame, text="支持 JPG, PNG, WEBP 格式，将自动裁剪为高清正方形", 
-                 font=("Arial", 9), fg="#666").pack(anchor="w")
-        
-        # 修改1：添加头像预览标签 (增大初始占位大小提示)
-        self.avatar_label = tk.Label(avatar_frame, text="[暂无头像]", bg="#f0f0f0", width=20, height=10)
-        self.avatar_label.pack(pady=5)
-        
-        # 加载当前头像
+        # 分割线
+        layout.addWidget(QLabel("-" * 80))
+
+        # 头像区域
+        layout.addWidget(QLabel("个人头像"), alignment=Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(QLabel("支持 JPG, PNG, WEBP 格式，自动裁剪为正方形"))
+
+        self.avatar_label = QLabel("[暂无头像]")
+        self.avatar_label.setStyleSheet("background:#f0f0f0;")
+        self.avatar_label.setFixedSize(200, 200)
+        self.avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.avatar_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        avatar_btn = QPushButton("选择并上传头像")
+        avatar_btn.setStyleSheet("background:#9C27B0; color:white;")
+        avatar_btn.clicked.connect(self.change_avatar)
+        layout.addWidget(avatar_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # 分割线
+        layout.addWidget(QLabel("-" * 80))
+
+        # 音乐开关
+        layout.addWidget(QLabel("背景音乐"))
+        self.music_switch = QCheckBox("开启背景音乐 (MP3)")
+        self.music_switch.setChecked(self.music_manager.get_status())
+        self.music_switch.toggled.connect(self.toggle_music)
+        layout.addWidget(self.music_switch)
+
+        # 分割线
+        layout.addWidget(QLabel("-" * 80))
+
+        # 备份数据
+        layout.addWidget(QLabel("数据管理"))
+        layout.addWidget(QLabel("备份提交记录与个人信息到本地 JSON"))
+        backup_btn = QPushButton("立即备份数据")
+        backup_btn.setStyleSheet("background:#9C27B0; color:white;")
+        backup_btn.clicked.connect(self.backup_data)
+        layout.addWidget(backup_btn)
+
+        # 分割线
+        layout.addWidget(QLabel("-" * 80))
+
+        # 修改邮箱
+        layout.addWidget(QLabel("修改邮箱"))
+        user_data = self.user_service.get_user_by_username(self.user['username'])
+        self.email_edit = QLineEdit()
+        if user_data:
+            self.email_edit.setText(user_data.get('email', ''))
+        layout.addWidget(self.email_edit)
+
+        save_email_btn = QPushButton("保存邮箱")
+        save_email_btn.setStyleSheet("background:#2196F3; color:white;")
+        save_email_btn.clicked.connect(self.save_email)
+        layout.addWidget(save_email_btn, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # 分割线
+        layout.addWidget(QLabel("-" * 80))
+
+        # 修改密码
+        layout.addWidget(QLabel("修改密码"))
+        self.pwd_edit = QLineEdit()
+        self.pwd_edit.setPlaceholderText("新密码")
+        self.pwd_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        layout.addWidget(self.pwd_edit)
+
+        self.confirm_pwd_edit = QLineEdit()
+        self.confirm_pwd_edit.setPlaceholderText("确认密码")
+        self.confirm_pwd_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        layout.addWidget(self.confirm_pwd_edit)
+
+        save_pwd_btn = QPushButton("保存密码")
+        save_pwd_btn.setStyleSheet("background:#FF9800; color:white;")
+        save_pwd_btn.clicked.connect(self.save_password)
+        layout.addWidget(save_pwd_btn, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # 关闭按钮
+        close_btn = QPushButton("关闭")
+        close_btn.setStyleSheet("background:#9E9E9E; color:white;")
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # 加载头像
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        current_avatar_path = os.path.join(project_root, "avatars", f"{self.user['username']}.jpg")
-        self.load_and_display_avatar(current_avatar_path)
-        
-        tk.Button(
-            avatar_frame, 
-            text="选择并上传头像", 
-            command=self.change_avatar, 
-            bg="#9C27B0", 
-            fg="white",
-            font=("Arial", 10)
-        ).pack(anchor="w", pady=5)
-
-        # 分隔线
-        tk.Frame(self.window, height=2, bg="#ddd").pack(fill="x", padx=20, pady=10)
-
-        # 新增：背景音乐设置
-        music_frame = tk.Frame(self.window, padx=20, pady=10)
-        music_frame.pack(fill="x")
-        tk.Label(music_frame, text="背景音乐", font=("Arial", 11, "bold")).pack(anchor="w")
-        
-        # 修改：初始化时获取持久化的状态
-        self.music_var = tk.BooleanVar(value=self.music_manager.get_status())
-        tk.Checkbutton(
-            music_frame, 
-            text="开启背景音乐 (MP3)", 
-            variable=self.music_var, 
-            command=self.toggle_music,
-            font=("Arial", 10)
-        ).pack(anchor="w", pady=5)
-
-        # 分隔线
-        tk.Frame(self.window, height=2, bg="#ddd").pack(fill="x", padx=20, pady=10)
-
-        # 新增：数据备份区域
-        backup_frame = tk.Frame(self.window, padx=20, pady=10)
-        backup_frame.pack(fill="x")
-        tk.Label(backup_frame, text="数据管理", font=("Arial", 11, "bold")).pack(anchor="w")
-        tk.Label(backup_frame, text="将您的提交记录和个人信息备份到本地 (JSON格式)", 
-                 font=("Arial", 9), fg="#666").pack(anchor="w")
-        
-        tk.Button(
-            backup_frame, 
-            text="立即备份数据", 
-            command=self.backup_data, 
-            bg="#9C27B0", 
-            fg="white",
-            font=("Arial", 10)
-        ).pack(anchor="w", pady=5)
-
-        # 分隔线
-        tk.Frame(self.window, height=2, bg="#ddd").pack(fill="x", padx=20, pady=10)
-
-        # 修改邮箱部分
-        email_frame = tk.Frame(self.window, padx=20, pady=10)
-        email_frame.pack(fill="x")
-        tk.Label(email_frame, text="修改邮箱", font=("Arial", 11, "bold")).pack(anchor="w")
-        
-        self.email_var = tk.StringVar()
-        # 获取当前最新邮箱
-        current_data = self.user_service.get_user_by_username(self.user['username'])
-        if current_data:
-            self.email_var.set(current_data.get('email', ''))
-            
-        tk.Entry(email_frame, textvariable=self.email_var, width=30).pack(pady=5, fill="x")
-        tk.Button(email_frame, text="保存邮箱", command=self.save_email, bg="#2196F3", fg="white").pack(anchor="e")
-
-        # 分隔线
-        tk.Frame(self.window, height=2, bg="#ddd").pack(fill="x", padx=20, pady=10)
-
-        # 修改密码部分
-        pwd_frame = tk.Frame(self.window, padx=20, pady=10)
-        pwd_frame.pack(fill="x")
-        tk.Label(pwd_frame, text="修改密码", font=("Arial", 11, "bold")).pack(anchor="w")
-        
-        tk.Label(pwd_frame, text="新密码:", font=("Arial", 9)).pack(anchor="w")
-        self.new_pwd_var = tk.StringVar()
-        tk.Entry(pwd_frame, textvariable=self.new_pwd_var, show="*", width=30).pack(pady=2, fill="x")
-        
-        tk.Label(pwd_frame, text="确认密码:", font=("Arial", 9)).pack(anchor="w")
-        self.confirm_pwd_var = tk.StringVar()
-        tk.Entry(pwd_frame, textvariable=self.confirm_pwd_var, show="*", width=30).pack(pady=2, fill="x")
-        
-        tk.Button(pwd_frame, text="保存密码", command=self.save_password, bg="#FF9800", fg="white").pack(anchor="e", pady=5)
-
-        # 底部关闭按钮
-        tk.Button(self.window, text="关闭", command=self.window.destroy, bg="#9E9E9E", fg="white").pack(pady=10)
+        avatar_path = os.path.join(project_root, "avatars", f"{self.user['username']}.jpg")
+        self.load_and_display_avatar(avatar_path)
 
     def save_email(self):
-        new_email = self.email_var.get().strip()
-        success, msg = self.user_service.update_email(
+        new_email = self.email_edit.text().strip()
+        ok, msg = self.user_service.update_email(
             operator_username=self.user['username'],
             target_username=self.user['username'],
             new_email=new_email
         )
-        messagebox.showinfo("结果", msg)
-        if success:
-            # 可选：通知父窗口刷新显示
-            if hasattr(self.parent, 'email_label'):
-                self.parent.email_label.config(text=new_email)
+        QMessageBox.information(self, "结果", msg)
 
     def save_password(self):
-        pwd = self.new_pwd_var.get()
-        confirm_pwd = self.confirm_pwd_var.get()
-        
-        if pwd != confirm_pwd:
-            messagebox.showerror("错误", "两次输入的密码不一致")
+        pwd = self.pwd_edit.text()
+        confirm = self.confirm_pwd_edit.text()
+
+        if pwd != confirm:
+            QMessageBox.critical(self, "错误", "两次密码不一致")
             return
-        if not pwd or len(pwd) < 6:
-            messagebox.showerror("错误", "密码长度至少为6位")
+        if len(pwd) < 6:
+            QMessageBox.critical(self, "错误", "密码至少 6 位")
             return
-            
-        success, msg = self.user_service.reset_password(
+
+        ok, msg = self.user_service.reset_password(
             operator_username=self.user['username'],
             target_username=self.user['username'],
             new_password=pwd
         )
-        messagebox.showinfo("结果", msg)
-        if success:
-            self.new_pwd_var.set("")
-            self.confirm_pwd_var.set("")
+        QMessageBox.information(self, "结果", msg)
+        if ok:
+            self.pwd_edit.clear()
+            self.confirm_pwd_edit.clear()

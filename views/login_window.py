@@ -1,216 +1,199 @@
-import tkinter as tk
-from tkinter import messagebox, ttk
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
 from views.user_window import UserWindow
 from views.admin_window import AdminWindow
 from views.settings_window import SettingsWindow
 from models.constants import UserRole
 from config import Config
 from services.auth_service import AuthService
-from utils.db import Database # 仅用于检查连接状态
+from utils.db import Database
 import os
-import tkinter.font as tkfont
 
-class LoginWindow:
-    def __init__(self, root):
-        self.root = root
-        self.db = Database() # 保留用于连接状态检查
-        self.auth_service = AuthService() # 新增
-        
-        # 加载自定义字体
-        self.custom_font_family = self._load_custom_font()
-        
+class LoginWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.db = Database()
+        self.auth_service = AuthService()
+
+        self.setWindowTitle("文本提交系统 - 登录")
+        self.resize(400, 500)
+        self.setMinimumSize(350, 450)
+
         self.setup_menu()
         self.setup_ui()
         self.check_database_connection()
-    
-    def _load_custom_font(self):
-        """加载自定义字体并返回家族名称"""
-        font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "07.ttf")
-        if os.path.exists(font_path):
-            try:
-                font = tkfont.Font(file=font_path, size=12)
-                return font.actual('family')
-            except Exception:
-                pass
-        return "Arial" #  fallback
 
     def setup_menu(self):
-        """设置菜单栏"""
-        menubar = tk.Menu(self.root)
-        self.root.config(menu=menubar)
-        file_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="文件", menu=file_menu)
-        file_menu.add_command(label="云端配置", command=self.open_settings)
-        file_menu.add_separator()
-        file_menu.add_command(label="退出", command=self.root.quit)
-        help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="帮助", menu=help_menu)
-        help_menu.add_command(label="关于", command=self.show_about)
-    
+        menubar = QMenuBar()
+        self.setMenuBar(menubar)
+
+        file_menu = menubar.addMenu("文件")
+        settings_action = file_menu.addAction("云端配置")
+        settings_action.triggered.connect(self.open_settings)
+        file_menu.addSeparator()
+        exit_action = file_menu.addAction("退出")
+        exit_action.triggered.connect(self.close)
+
+        help_menu = menubar.addMenu("帮助")
+        about_action = help_menu.addAction("关于")
+        about_action.triggered.connect(self.show_about)
+
     def open_settings(self):
-        """打开配置窗口"""
-        SettingsWindow(self.root)
-    
+        self.settings_win = SettingsWindow(self)
+        self.settings_win.show()
+
     def show_about(self):
-        """显示关于信息"""
         about_text = f"""{Config.APP_NAME} v{Config.APP_VERSION}
-        
+
 一个简单的文本提交管理系统
 使用 MongoDB Atlas 云端数据库
-        
+
 © 2024 版权所有"""
-        messagebox.showinfo("关于", about_text)
-    
+        QMessageBox.information(self, "关于", about_text)
+
     def check_database_connection(self):
-        """检查数据库连接"""
         if self.db.is_connected:
-            self.connection_status.config(text="● 已连接到云端", fg="#4CAF50")
+            self.connection_status.setText("● 已连接到云端")
+            self.connection_status.setStyleSheet("color: #4CAF50;")
         else:
-            self.connection_status.config(
-                text="● 未连接到云端 (点击文件->云端配置设置)",
-                fg="#f44336"
-            )
-    
+            self.connection_status.setText("● 未连接到云端 (点击文件->云端配置设置)")
+            self.connection_status.setStyleSheet("color: #f44336;")
+
     def setup_ui(self):
-        """设置UI界面"""
-        self.root.title("文本提交系统 - 登录")
-        self.root.geometry("400x500")
-        self.root.resizable(False, False)
-        
-        title_label = tk.Label(
-            self.root,
-            text="文本提交系统",
-            font=(self.custom_font_family, 20, "bold"),
-            fg="#333"
-        )
-        title_label.pack(pady=30)
-        
-        login_frame = tk.Frame(self.root, bg="#f0f0f0", padx=20, pady=20)
-        login_frame.pack(padx=40, pady=20, fill="both")
-        
-        tk.Label(login_frame, text="用户名:", bg="#f0f0f0", font=(self.custom_font_family, 12)).pack(pady=5)
-        self.username_entry = tk.Entry(login_frame, font=(self.custom_font_family, 12), width=25)
-        self.username_entry.pack(pady=5)
-        
-        tk.Label(login_frame, text="密码:", bg="#f0f0f0", font=(self.custom_font_family, 12)).pack(pady=5)
-        self.password_entry = tk.Entry(login_frame, show="*", font=(self.custom_font_family, 12), width=25)
-        self.password_entry.pack(pady=5)
-        
-        button_frame = tk.Frame(login_frame, bg="#f0f0f0")
-        button_frame.pack(pady=20)
-        
-        login_btn = tk.Button(
-            button_frame,
-            text="登录",
-            command=self.login,
-            bg="#4CAF50",
-            fg="white",
-            font=(self.custom_font_family, 12),
-            width=10
-        )
-        login_btn.pack(side="left", padx=5)
-        
-        register_btn = tk.Button(
-            button_frame,
-            text="注册",
-            command=self.show_register,
-            bg="#2196F3",
-            fg="white",
-            font=(self.custom_font_family, 12),
-            width=10
-        )
-        register_btn.pack(side="left", padx=5)
-        
-        self.root.bind('<Return>', lambda event: self.login())
-        
-        status_frame = tk.Frame(self.root, bg="#f0f0f0", height=30)
-        status_frame.pack(fill="x", side="bottom")
-        self.connection_status = tk.Label(
-            status_frame,
-            text="正在检查连接...",
-            bg="#f0f0f0",
-            font=(self.custom_font_family, 9)
-        )
-        self.connection_status.pack(side="left", padx=10)
-    
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QVBoxLayout(central)
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 标题
+        title = QLabel("文本提交系统")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #333;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addSpacing(30)
+        main_layout.addWidget(title)
+
+        # 登录框
+        login_frame = QFrame()
+        login_frame.setStyleSheet("background-color: #f0f0f0;")
+        login_frame.setContentsMargins(20, 20, 20, 20)
+        frame_layout = QVBoxLayout(login_frame)
+
+        frame_layout.addWidget(QLabel("用户名:"))
+        self.username_entry = QLineEdit()
+        self.username_entry.setFixedHeight(30)
+        frame_layout.addWidget(self.username_entry)
+
+        frame_layout.addWidget(QLabel("密码:"))
+        self.password_entry = QLineEdit()
+        self.password_entry.setFixedHeight(30)
+        self.password_entry.setEchoMode(QLineEdit.EchoMode.Password)
+        frame_layout.addWidget(self.password_entry)
+
+        # 按钮
+        btn_layout = QHBoxLayout()
+        login_btn = QPushButton("登录")
+        login_btn.setStyleSheet("background-color: #4CAF50; color: white;")
+        login_btn.clicked.connect(self.login)
+        register_btn = QPushButton("注册")
+        register_btn.setStyleSheet("background-color: #2196F3; color: white;")
+        register_btn.clicked.connect(self.show_register)
+        btn_layout.addWidget(login_btn)
+        btn_layout.addWidget(register_btn)
+        frame_layout.addLayout(btn_layout)
+
+        main_layout.addWidget(login_frame, stretch=1)
+
+        # 状态栏
+        status_bar = QFrame()
+        status_bar.setStyleSheet("background-color: #f0f0f0;")
+        status_bar.setFixedHeight(30)
+        status_layout = QHBoxLayout(status_bar)
+        status_layout.setContentsMargins(10, 0, 10, 0)
+        self.connection_status = QLabel("正在检查连接...")
+        self.connection_status.setStyleSheet("font-size: 9px;")
+        status_layout.addWidget(self.connection_status)
+        main_layout.addWidget(status_bar)
+
+        # 回车登录
+        self.username_entry.returnPressed.connect(self.login)
+        self.password_entry.returnPressed.connect(self.login)
+
     def login(self):
-        """登录功能"""
-        username = self.username_entry.get()
-        password = self.password_entry.get()
+        username = self.username_entry.text().strip()
+        password = self.password_entry.text().strip()
+
         if not username or not password:
-            messagebox.showerror("错误", "请输入用户名和密码")
+            QMessageBox.critical(self, "错误", "请输入用户名和密码")
             return
+
         user = self.auth_service.login(username, password)
         if user:
-            messagebox.showinfo("成功", f"欢迎回来, {username}!")
-            
-            # 新增：登录成功后，根据配置启动背景音乐
-            from utils.music_manager import MusicManager
-            music_mgr = MusicManager()
-            # 修改：直接调用播放，play方法内部会检查 enabled 状态
-            music_mgr.play()
-            
-            self.root.withdraw()
+            QMessageBox.information(self, "成功", f"欢迎回来, {username}!")
+
+            try:
+                from utils.music_manager import MusicManager
+                music_mgr = MusicManager()
+                music_mgr.play()
+            except:
+                pass
+
+            self.hide()
             if user.get("role") == UserRole.ADMIN:
-                AdminWindow(self.root, user)
+                self.next_win = AdminWindow(self, user)
             else:
-                UserWindow(self.root, user)
+                self.next_win = UserWindow(self, user)
+            self.next_win.show()
         else:
-            messagebox.showerror("错误", "用户名或密码错误")
-    
+            QMessageBox.critical(self, "错误", "用户名或密码错误")
+
     def show_register(self):
-        """显示注册窗口"""
-        register_window = tk.Toplevel(self.root)
-        register_window.title("用户注册")
-        register_window.geometry("350x450")
-        register_window.resizable(False, False)
-        register_window.transient(self.root)
-        register_window.grab_set()
-        
-        tk.Label(register_window, text="用户注册", font=(self.custom_font_family, 16, "bold")).pack(pady=20)
-        form_frame = tk.Frame(register_window, padx=20, pady=20)
-        form_frame.pack()
-        
-        tk.Label(form_frame, text="用户名:", font=(self.custom_font_family, 11)).pack(anchor="w")
-        username_entry = tk.Entry(form_frame, font=(self.custom_font_family, 11), width=25)
-        username_entry.pack(pady=5)
-        
-        tk.Label(form_frame, text="密码:", font=(self.custom_font_family, 11)).pack(anchor="w")
-        password_entry = tk.Entry(form_frame, show="*", font=(self.custom_font_family, 11), width=25)
-        password_entry.pack(pady=5)
-        
-        tk.Label(form_frame, text="确认密码:", font=(self.custom_font_family, 11)).pack(anchor="w")
-        confirm_entry = tk.Entry(form_frame, show="*", font=(self.custom_font_family, 11), width=25)
-        confirm_entry.pack(pady=5)
-        
-        tk.Label(form_frame, text="邮箱:", font=(self.custom_font_family, 11)).pack(anchor="w")
-        email_entry = tk.Entry(form_frame, font=(self.custom_font_family, 11), width=25)
-        email_entry.pack(pady=5)
-        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("用户注册")
+        dialog.resize(350, 450)
+        dialog.setMinimumSize(300, 400)
+        layout = QVBoxLayout(dialog)
+
+        layout.addWidget(QLabel("用户注册"), alignment=Qt.AlignmentFlag.AlignCenter)
+
+        form = QFormLayout()
+        self.reg_user = QLineEdit()
+        self.reg_pwd = QLineEdit()
+        self.reg_pwd.setEchoMode(QLineEdit.EchoMode.Password)
+        self.reg_cfm = QLineEdit()
+        self.reg_cfm.setEchoMode(QLineEdit.EchoMode.Password)
+        self.reg_email = QLineEdit()
+
+        form.addRow("用户名:", self.reg_user)
+        form.addRow("密码:", self.reg_pwd)
+        form.addRow("确认密码:", self.reg_cfm)
+        form.addRow("邮箱:", self.reg_email)
+        layout.addLayout(form)
+
         def do_register():
-            username = username_entry.get()
-            password = password_entry.get()
-            confirm = confirm_entry.get()
-            email = email_entry.get()
-            if not all([username, password, confirm, email]):
-                messagebox.showerror("错误", "请填写所有字段")
+            u = self.reg_user.text().strip()
+            p = self.reg_pwd.text().strip()
+            c = self.reg_cfm.text().strip()
+            e = self.reg_email.text().strip()
+
+            if not all([u, p, c, e]):
+                QMessageBox.critical(dialog, "错误", "请填写所有字段")
                 return
-            if password != confirm:
-                messagebox.showerror("错误", "两次输入的密码不一致")
+            if p != c:
+                QMessageBox.critical(dialog, "错误", "两次密码不一致")
                 return
-            success, message = self.auth_service.register(username, password, email)
-            if success:
-                messagebox.showinfo("成功", message)
-                register_window.destroy()
+
+            ok, msg = self.auth_service.register(u, p, e)
+            if ok:
+                QMessageBox.information(dialog, "成功", msg)
+                dialog.accept()
             else:
-                messagebox.showerror("错误", message)
-        
-        tk.Button(
-            form_frame,
-            text="注册",
-            command=do_register,
-            bg="#4CAF50",
-            fg="white",
-            font=(self.custom_font_family, 11),
-            width=15
-        ).pack(pady=20)
+                QMessageBox.critical(dialog, "错误", msg)
+
+        reg_btn = QPushButton("注册")
+        reg_btn.setStyleSheet("background-color: #4CAF50; color: white;")
+        reg_btn.clicked.connect(do_register)
+        layout.addWidget(reg_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        dialog.exec()
