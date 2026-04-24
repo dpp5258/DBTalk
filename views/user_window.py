@@ -5,6 +5,10 @@ from services.submission_service import SubmissionService
 from services.user_service import UserService
 from views.user_settings_window import UserSettingsWindow
 from bson import ObjectId
+# 新增：导入 Pillow 用于头像显示
+from PIL import Image, ImageTk
+import os
+import tkinter.font as tkfont
 
 class UserWindow:
     def __init__(self, root, user):
@@ -12,6 +16,12 @@ class UserWindow:
         self.user = user
         self.submission_service = SubmissionService()
         self.user_service = UserService()
+        
+        # 加载自定义字体
+        self.custom_font_family = self._load_custom_font()
+        
+        # 用于存储头像图片对象，防止被垃圾回收
+        self.avatar_image_obj = None
         
         self.window = tk.Toplevel(root)
         self.window.title(f"用户面板 - {user['username']}")
@@ -21,6 +31,17 @@ class UserWindow:
         self.setup_menu() # 新增：初始化菜单
         self.setup_ui()
     
+    def _load_custom_font(self):
+        """加载自定义字体并返回家族名称"""
+        font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "07.ttf")
+        if os.path.exists(font_path):
+            try:
+                font = tkfont.Font(file=font_path, size=12)
+                return font.actual('family')
+            except Exception:
+                pass
+        return "Arial" #  fallback
+
     def setup_menu(self):
         """设置顶部菜单栏"""
         menubar = tk.Menu(self.window)
@@ -43,7 +64,7 @@ class UserWindow:
         tk.Label(
             welcome_frame,
             text=f"欢迎，{self.user['username']}!",
-            font=("Arial", 14, "bold"),
+            font=(self.custom_font_family, 14, "bold"),
             bg="#e3f2fd"
         ).pack(side="left", padx=20, pady=15)
         
@@ -69,21 +90,21 @@ class UserWindow:
         self.setup_profile_tab(profile_tab)
     
     def setup_submit_tab(self, parent):
-        tk.Label(parent, text="提交新文本", font=("Arial", 14, "bold")).pack(pady=10)
+        tk.Label(parent, text="提交新文本", font=(self.custom_font_family, 14, "bold")).pack(pady=10)
         form_frame = tk.Frame(parent, padx=20, pady=10)
         form_frame.pack(fill="both", expand=True)
         
-        tk.Label(form_frame, text="标题:", font=("Arial", 11)).pack(anchor="w")
-        self.title_entry = tk.Entry(form_frame, font=("Arial", 11), width=50)
+        tk.Label(form_frame, text="标题:", font=(self.custom_font_family, 11)).pack(anchor="w")
+        self.title_entry = tk.Entry(form_frame, font=(self.custom_font_family, 11), width=50)
         self.title_entry.pack(pady=5, fill="x")
         
-        tk.Label(form_frame, text="内容:", font=("Arial", 11)).pack(anchor="w", pady=(10,0))
+        tk.Label(form_frame, text="内容:", font=(self.custom_font_family, 11)).pack(anchor="w", pady=(10,0))
         text_frame = tk.Frame(form_frame)
         text_frame.pack(fill="both", expand=True, pady=5)
         self.content_text = scrolledtext.ScrolledText(
             text_frame,
             height=15,
-            font=("Arial", 11),
+            font=(self.custom_font_family, 11),
             wrap=tk.WORD
         )
         self.content_text.pack(fill="both", expand=True)
@@ -94,12 +115,12 @@ class UserWindow:
             command=self.submit_text,
             bg="#4CAF50",
             fg="white",
-            font=("Arial", 12, "bold"),
+            font=(self.custom_font_family, 12, "bold"),
             width=15
         ).pack(pady=20)
     
     def setup_history_tab(self, parent):
-        tk.Label(parent, text="提交历史", font=("Arial", 14, "bold")).pack(pady=10)
+        tk.Label(parent, text="提交历史", font=(self.custom_font_family, 14, "bold")).pack(pady=10)
         columns = ("时间", "标题", "状态")
         self.tree = ttk.Treeview(parent, columns=columns, show="headings", height=15)
         self.tree.heading("时间", text="提交时间")
@@ -127,7 +148,7 @@ class UserWindow:
             command=self.refresh_history,
             bg="#2196F3",
             fg="white",
-            font=("Arial", 10)
+            font=(self.custom_font_family, 10)
         ).pack(side="left", padx=5)
         
         tk.Button(
@@ -136,7 +157,7 @@ class UserWindow:
             command=self.edit_selected_submission,
             bg="#FF9800",
             fg="white",
-            font=("Arial", 10)
+            font=(self.custom_font_family, 10)
         ).pack(side="left", padx=5)
         
         tk.Button(
@@ -145,7 +166,7 @@ class UserWindow:
             command=self.delete_selected_submission,
             bg="#f44336",
             fg="white",
-            font=("Arial", 10)
+            font=(self.custom_font_family, 10)
         ).pack(side="left", padx=5)
         
         self.refresh_history()
@@ -154,13 +175,14 @@ class UserWindow:
         """设置交流广场界面"""
         toolbar = tk.Frame(parent, bg="#f0f0f0", height=40)
         toolbar.pack(fill="x", pady=5)
-        tk.Label(toolbar, text="公开交流内容 (已批准)", font=("Arial", 12, "bold")).pack(side="left", padx=10)
+        tk.Label(toolbar, text="公开交流内容 (已批准)", font=(self.custom_font_family, 12, "bold")).pack(side="left", padx=10)
         tk.Button(
             toolbar,
             text="刷新",
             command=self.refresh_community,
             bg="#2196F3",
-            fg="white"
+            fg="white",
+            font=(self.custom_font_family, 10)
         ).pack(side="right", padx=10)
         
         columns = ("时间", "作者", "标题")
@@ -229,44 +251,73 @@ class UserWindow:
         
         header_frame = tk.Frame(dialog, bg="#e3f2fd", pady=10)
         header_frame.pack(fill="x")
-        tk.Label(header_frame, text=title, font=("Arial", 14, "bold"), bg="#e3f2fd").pack()
-        tk.Label(header_frame, text=f"作者: {author}", font=("Arial", 10), bg="#e3f2fd", fg="#666").pack()
+        tk.Label(header_frame, text=title, font=(self.custom_font_family, 14, "bold"), bg="#e3f2fd").pack()
+        tk.Label(header_frame, text=f"作者: {author}", font=(self.custom_font_family, 10), bg="#e3f2fd", fg="#666").pack()
         
         content_frame = tk.Frame(dialog, padx=10, pady=10)
         content_frame.pack(fill="both", expand=True)
         
-        text_widget = scrolledtext.ScrolledText(content_frame, font=("Arial", 11), wrap=tk.WORD, state="disabled")
+        text_widget = scrolledtext.ScrolledText(content_frame, font=(self.custom_font_family, 11), wrap=tk.WORD, state="disabled")
         text_widget.pack(fill="both", expand=True)
         
         text_widget.config(state="normal")
         text_widget.insert("1.0", content)
         text_widget.config(state="disabled")
         
-        tk.Button(dialog, text="关闭", command=dialog.destroy, bg="#f44336", fg="white").pack(pady=10)
+        tk.Button(dialog, text="关闭", command=dialog.destroy, bg="#f44336", fg="white", font=(self.custom_font_family, 10)).pack(pady=10)
 
     def setup_profile_tab(self, parent):
         info_frame = tk.Frame(parent, padx=30, pady=20)
         info_frame.pack(fill="both", expand=True)
-        tk.Label(info_frame, text="👤", font=("Arial", 48), bg="#e0e0e0", width=4, height=2).pack(pady=20)
-        
-        tk.Label(info_frame, text="用户名:", font=("Arial", 11, "bold")).pack(anchor="w")
-        tk.Label(info_frame, text=self.user['username'], font=("Arial", 11)).pack(anchor="w", pady=(0,10))
-        
-        tk.Label(info_frame, text="邮箱:", font=("Arial", 11, "bold")).pack(anchor="w")
+
+        # 修改：增大头像预览区域，并添加滚动条支持
+        self.profile_avatar_label = tk.Label(info_frame, text="[暂无头像]", bg="#f0f0f0", width=40, height=20)  # 增大尺寸
+        self.profile_avatar_label.pack(pady=10)
+
+        # 加载当前头像
+        self.refresh_avatar()
+
+        tk.Label(info_frame, text="用户名:", font=(self.custom_font_family, 11, "bold")).pack(anchor="w")
+        tk.Label(info_frame, text=self.user['username'], font=(self.custom_font_family, 11)).pack(anchor="w", pady=(0, 10))
+
+        tk.Label(info_frame, text="邮箱:", font=(self.custom_font_family, 11, "bold")).pack(anchor="w")
         current_user_data = self.user_service.get_user_by_username(self.user['username'])
         email_display = current_user_data.get('email', '未设置') if current_user_data else self.user.get('email', '未设置')
-        self.email_label = tk.Label(info_frame, text=email_display, font=("Arial", 11))
-        self.email_label.pack(anchor="w", pady=(0,10))
-        
-        tk.Label(info_frame, text="注册时间:", font=("Arial", 11, "bold")).pack(anchor="w")
+        self.email_label = tk.Label(info_frame, text=email_display, font=(self.custom_font_family, 11))
+        self.email_label.pack(anchor="w", pady=(0, 10))
+
+        tk.Label(info_frame, text="注册时间:", font=(self.custom_font_family, 11, "bold")).pack(anchor="w")
         reg_time = self.user.get('created_at', '未知')
         if reg_time != 'Unknown' and hasattr(reg_time, 'strftime'):
             reg_time = reg_time.strftime("%Y-%m-%d %H:%M")
-        tk.Label(info_frame, text=reg_time, font=("Arial", 11)).pack(anchor="w")
+        tk.Label(info_frame, text=reg_time, font=(self.custom_font_family, 11)).pack(anchor="w")
 
         # 移除原有的 btn_frame 和修改按钮，引导用户去菜单设置
-        tip_label = tk.Label(info_frame, text="💡 提示：如需修改邮箱或密码，请点击顶部菜单【设置】->【账号设置】", fg="#666", font=("Arial", 9))
+        tip_label = tk.Label(info_frame, text="💡 提示：如需修改邮箱或密码，请点击顶部菜单【设置】->【账号设置】", fg="#666", font=(self.custom_font_family, 9))
         tip_label.pack(pady=20)
+
+    def refresh_avatar(self):
+        """刷新个人信息页面的头像显示"""
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            avatar_path = os.path.join(project_root, "avatars", f"{self.user['username']}.jpg")
+            
+            if os.path.exists(avatar_path):
+                img = Image.open(avatar_path)
+                # 调整为适合显示的大小，例如 400x400 (尽可能大)
+                img = img.resize((400, 400), Image.LANCZOS)
+                self.avatar_image_obj = ImageTk.PhotoImage(img)
+                
+                if hasattr(self, 'profile_avatar_label'):
+                    # 修改：设置图片前，先清空文本，防止重叠
+                    self.profile_avatar_label.config(text="", image=self.avatar_image_obj)
+            else:
+                if hasattr(self, 'profile_avatar_label'):
+                    # 修改：没有图片时，只设置文本，不设置图片（传入空字符串或None以清除图像）
+                    self.profile_avatar_label.config(text="[暂无头像]", image="")
+                    self.avatar_image_obj = None
+        except Exception as e:
+            print(f"刷新头像失败: {e}")
 
     def submit_text(self):
         title = self.title_entry.get()
@@ -400,18 +451,18 @@ class UserWindow:
         
         header_frame = tk.Frame(dialog, bg="#e3f2fd", pady=10)
         header_frame.pack(fill="x")
-        tk.Label(header_frame, text="修改内容将重置审批状态为【待审核】", font=("Arial", 10), bg="#e3f2fd", fg="#d32f2f").pack()
+        tk.Label(header_frame, text="修改内容将重置审批状态为【待审核】", font=(self.custom_font_family, 10), bg="#e3f2fd", fg="#d32f2f").pack()
         
         form_frame = tk.Frame(dialog, padx=10, pady=10)
         form_frame.pack(fill="both", expand=True)
         
-        tk.Label(form_frame, text="标题:", font=("Arial", 11)).pack(anchor="w")
-        title_entry = tk.Entry(form_frame, font=("Arial", 11), width=50)
+        tk.Label(form_frame, text="标题:", font=(self.custom_font_family, 11)).pack(anchor="w")
+        title_entry = tk.Entry(form_frame, font=(self.custom_font_family, 11), width=50)
         title_entry.insert(0, sub_doc['title'])
         title_entry.pack(pady=5, fill="x")
         
-        tk.Label(form_frame, text="内容:", font=("Arial", 11)).pack(anchor="w", pady=(10,0))
-        content_text = scrolledtext.ScrolledText(form_frame, height=15, font=("Arial", 11), wrap=tk.WORD)
+        tk.Label(form_frame, text="内容:", font=(self.custom_font_family, 11)).pack(anchor="w", pady=(10,0))
+        content_text = scrolledtext.ScrolledText(form_frame, height=15, font=(self.custom_font_family, 11), wrap=tk.WORD)
         content_text.insert("1.0", sub_doc['content'])
         content_text.pack(fill="both", expand=True, pady=5)
         
@@ -440,8 +491,8 @@ class UserWindow:
         btn_frame = tk.Frame(dialog, pady=10)
         btn_frame.pack(fill="x")
         
-        tk.Button(btn_frame, text="保存修改", command=save_changes, bg="#4CAF50", fg="white", font=("Arial", 11)).pack(side="left", padx=20, expand=True)
-        tk.Button(btn_frame, text="取消", command=dialog.destroy, bg="#9E9E9E", fg="white", font=("Arial", 11)).pack(side="right", padx=20, expand=True)
+        tk.Button(btn_frame, text="保存修改", command=save_changes, bg="#4CAF50", fg="white", font=(self.custom_font_family, 11)).pack(side="left", padx=20, expand=True)
+        tk.Button(btn_frame, text="取消", command=dialog.destroy, bg="#9E9E9E", fg="white", font=(self.custom_font_family, 11)).pack(side="right", padx=20, expand=True)
 
     def logout(self):
         if messagebox.askyesno("确认", "确定要登出吗？"):

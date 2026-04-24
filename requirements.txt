@@ -2,3 +2,4 @@ pymongo
 python-dotenv
 cryptography
 tkinter
+Pillow

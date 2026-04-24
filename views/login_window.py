@@ -7,16 +7,33 @@ from models.constants import UserRole
 from config import Config
 from services.auth_service import AuthService
 from utils.db import Database # 仅用于检查连接状态
+import os
+import tkinter.font as tkfont
 
 class LoginWindow:
     def __init__(self, root):
         self.root = root
         self.db = Database() # 保留用于连接状态检查
         self.auth_service = AuthService() # 新增
+        
+        # 加载自定义字体
+        self.custom_font_family = self._load_custom_font()
+        
         self.setup_menu()
         self.setup_ui()
         self.check_database_connection()
     
+    def _load_custom_font(self):
+        """加载自定义字体并返回家族名称"""
+        font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "07.ttf")
+        if os.path.exists(font_path):
+            try:
+                font = tkfont.Font(file=font_path, size=12)
+                return font.actual('family')
+            except Exception:
+                pass
+        return "Arial" #  fallback
+
     def setup_menu(self):
         """设置菜单栏"""
         menubar = tk.Menu(self.root)
@@ -63,7 +80,7 @@ class LoginWindow:
         title_label = tk.Label(
             self.root,
             text="文本提交系统",
-            font=("Arial", 20, "bold"),
+            font=(self.custom_font_family, 20, "bold"),
             fg="#333"
         )
         title_label.pack(pady=30)
@@ -71,12 +88,12 @@ class LoginWindow:
         login_frame = tk.Frame(self.root, bg="#f0f0f0", padx=20, pady=20)
         login_frame.pack(padx=40, pady=20, fill="both")
         
-        tk.Label(login_frame, text="用户名:", bg="#f0f0f0", font=("Arial", 12)).pack(pady=5)
-        self.username_entry = tk.Entry(login_frame, font=("Arial", 12), width=25)
+        tk.Label(login_frame, text="用户名:", bg="#f0f0f0", font=(self.custom_font_family, 12)).pack(pady=5)
+        self.username_entry = tk.Entry(login_frame, font=(self.custom_font_family, 12), width=25)
         self.username_entry.pack(pady=5)
         
-        tk.Label(login_frame, text="密码:", bg="#f0f0f0", font=("Arial", 12)).pack(pady=5)
-        self.password_entry = tk.Entry(login_frame, show="*", font=("Arial", 12), width=25)
+        tk.Label(login_frame, text="密码:", bg="#f0f0f0", font=(self.custom_font_family, 12)).pack(pady=5)
+        self.password_entry = tk.Entry(login_frame, show="*", font=(self.custom_font_family, 12), width=25)
         self.password_entry.pack(pady=5)
         
         button_frame = tk.Frame(login_frame, bg="#f0f0f0")
@@ -88,7 +105,7 @@ class LoginWindow:
             command=self.login,
             bg="#4CAF50",
             fg="white",
-            font=("Arial", 12),
+            font=(self.custom_font_family, 12),
             width=10
         )
         login_btn.pack(side="left", padx=5)
@@ -99,7 +116,7 @@ class LoginWindow:
             command=self.show_register,
             bg="#2196F3",
             fg="white",
-            font=("Arial", 12),
+            font=(self.custom_font_family, 12),
             width=10
         )
         register_btn.pack(side="left", padx=5)
@@ -112,7 +129,7 @@ class LoginWindow:
             status_frame,
             text="正在检查连接...",
             bg="#f0f0f0",
-            font=("Arial", 9)
+            font=(self.custom_font_family, 9)
         )
         self.connection_status.pack(side="left", padx=10)
     
@@ -126,6 +143,13 @@ class LoginWindow:
         user = self.auth_service.login(username, password)
         if user:
             messagebox.showinfo("成功", f"欢迎回来, {username}!")
+            
+            # 新增：登录成功后，根据配置启动背景音乐
+            from utils.music_manager import MusicManager
+            music_mgr = MusicManager()
+            # 修改：直接调用播放，play方法内部会检查 enabled 状态
+            music_mgr.play()
+            
             self.root.withdraw()
             if user.get("role") == UserRole.ADMIN:
                 AdminWindow(self.root, user)
@@ -143,24 +167,24 @@ class LoginWindow:
         register_window.transient(self.root)
         register_window.grab_set()
         
-        tk.Label(register_window, text="用户注册", font=("Arial", 16, "bold")).pack(pady=20)
+        tk.Label(register_window, text="用户注册", font=(self.custom_font_family, 16, "bold")).pack(pady=20)
         form_frame = tk.Frame(register_window, padx=20, pady=20)
         form_frame.pack()
         
-        tk.Label(form_frame, text="用户名:", font=("Arial", 11)).pack(anchor="w")
-        username_entry = tk.Entry(form_frame, font=("Arial", 11), width=25)
+        tk.Label(form_frame, text="用户名:", font=(self.custom_font_family, 11)).pack(anchor="w")
+        username_entry = tk.Entry(form_frame, font=(self.custom_font_family, 11), width=25)
         username_entry.pack(pady=5)
         
-        tk.Label(form_frame, text="密码:", font=("Arial", 11)).pack(anchor="w")
-        password_entry = tk.Entry(form_frame, show="*", font=("Arial", 11), width=25)
+        tk.Label(form_frame, text="密码:", font=(self.custom_font_family, 11)).pack(anchor="w")
+        password_entry = tk.Entry(form_frame, show="*", font=(self.custom_font_family, 11), width=25)
         password_entry.pack(pady=5)
         
-        tk.Label(form_frame, text="确认密码:", font=("Arial", 11)).pack(anchor="w")
-        confirm_entry = tk.Entry(form_frame, show="*", font=("Arial", 11), width=25)
+        tk.Label(form_frame, text="确认密码:", font=(self.custom_font_family, 11)).pack(anchor="w")
+        confirm_entry = tk.Entry(form_frame, show="*", font=(self.custom_font_family, 11), width=25)
         confirm_entry.pack(pady=5)
         
-        tk.Label(form_frame, text="邮箱:", font=("Arial", 11)).pack(anchor="w")
-        email_entry = tk.Entry(form_frame, font=("Arial", 11), width=25)
+        tk.Label(form_frame, text="邮箱:", font=(self.custom_font_family, 11)).pack(anchor="w")
+        email_entry = tk.Entry(form_frame, font=(self.custom_font_family, 11), width=25)
         email_entry.pack(pady=5)
         
         def do_register():
@@ -187,6 +211,6 @@ class LoginWindow:
             command=do_register,
             bg="#4CAF50",
             fg="white",
-            font=("Arial", 11),
+            font=(self.custom_font_family, 11),
             width=15
         ).pack(pady=20)

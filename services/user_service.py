@@ -1,6 +1,7 @@
 from utils.db import Database
 from models.constants import UserRole, InitialAdmin
 from models.user import UserModel
+from bson import ObjectId
 
 class UserService:
     def __init__(self):
@@ -171,3 +172,81 @@ class UserService:
                 return False, "用户不存在"
         except Exception as e:
             return False, f"重置失败: {str(e)}"
+
+    def update_avatar(self, username: str, avatar_path: str) -> tuple:
+        """
+        更新用户头像路径
+        :param username: 用户名
+        :param avatar_path: 相对或绝对路径
+        :return: (success: bool, message: str)
+        """
+        if not self.db.is_connected:
+            return False, "数据库未连接"
+        
+        try:
+            result = self.db.db.users.update_one(
+                {"username": username},
+                {"$set": {"avatar_path": avatar_path}}
+            )
+            if result.modified_count > 0:
+                return True, "头像更新成功"
+            else:
+                # 检查用户是否存在
+                if self.db.db.users.find_one({"username": username}):
+                    return True, "头像路径未变更"
+                return False, "用户不存在"
+        except Exception as e:
+            return False, f"更新失败: {str(e)}"
+
+    def get_user_backup_data(self, username: str) -> dict:
+        """
+        获取用于本地备份的用户数据
+        包含：用户基本信息（脱敏）、所有提交记录
+        :param username: 用户名
+        :return: 包含用户数据和提交列表的字典
+        """
+        if not self.db.is_connected:
+            raise Exception("数据库未连接")
+        
+        # 1. 获取用户信息（脱敏）
+        user_doc = self.db.db.users.find_one({"username": username}, {"password": 0})
+        if not user_doc:
+            raise Exception("用户不存在")
+        
+        # 转换 ObjectId 和 datetime 为字符串，以便 JSON 序列化
+        def serialize_doc(doc):
+            if doc is None:
+                return None
+            # 处理 ObjectId
+            if isinstance(doc, ObjectId):
+                return str(doc)
+            # 处理 datetime
+            if hasattr(doc, 'isoformat'):
+                return doc.isoformat()
+            # 处理字典
+            if isinstance(doc, dict):
+                new_doc = {}
+                for k, v in doc.items():
+                    new_doc[k] = serialize_doc(v)
+                return new_doc
+            # 处理列表
+            if isinstance(doc, list):
+                return [serialize_doc(item) for item in doc]
+            # 其他基本类型直接返回
+            return doc
+
+        safe_user = serialize_doc(user_doc)
+        
+        # 2. 获取该用户的所有提交记录
+        from services.submission_service import SubmissionService
+        sub_service = SubmissionService()
+        submissions = sub_service.get_user_submissions(username)
+        
+        safe_submissions = [serialize_doc(sub) for sub in submissions]
+        
+        from datetime import datetime
+        return {
+            "user_info": safe_user,
+            "submissions": safe_submissions,
+            "backup_time": datetime.now().isoformat()
+        }

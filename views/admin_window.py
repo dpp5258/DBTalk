@@ -7,6 +7,8 @@ from services.submission_service import SubmissionService
 from services.user_service import UserService
 from bson import ObjectId
 from datetime import datetime
+import os
+import tkinter.font as tkfont
 
 class AdminWindow:
     def __init__(self, root, admin):
@@ -16,12 +18,26 @@ class AdminWindow:
         self.submission_service = SubmissionService()
         self.user_service = UserService()
         
+        # 加载自定义字体
+        self.custom_font_family = self._load_custom_font()
+        
         self.window = tk.Toplevel(root)
         self.window.title(f"管理员面板 - {admin['username']}")
         self.window.geometry("900x700")
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         self.setup_ui()
+    
+    def _load_custom_font(self):
+        """加载自定义字体并返回家族名称"""
+        font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "07.ttf")
+        if os.path.exists(font_path):
+            try:
+                font = tkfont.Font(file=font_path, size=12)
+                return font.actual('family')
+            except Exception:
+                pass
+        return "Arial" #  fallback
     
     def setup_ui(self):
         # 顶部栏
@@ -30,7 +46,7 @@ class AdminWindow:
         tk.Label(
             top_frame,
             text=f"管理员: {self.admin['username']}",
-            font=("Arial", 12, "bold"),
+            font=(self.custom_font_family, 12, "bold"),
             bg="#1e3c72",
             fg="white"
         ).pack(side="left", padx=20, pady=15)
@@ -40,7 +56,7 @@ class AdminWindow:
             command=self.logout,
             bg="#f44336",
             fg="white",
-            font=("Arial", 10),
+            font=(self.custom_font_family, 10),
             width=8
         ).pack(side="right", padx=20, pady=10)
         
@@ -69,16 +85,16 @@ class AdminWindow:
         
     def setup_announcement_tab(self, parent):
         """管理员发布公告/内容"""
-        tk.Label(parent, text="发布全局公告/内容", font=("Arial", 14, "bold")).pack(pady=10)
+        tk.Label(parent, text="发布全局公告/内容", font=(self.custom_font_family, 14, "bold")).pack(pady=10)
         form_frame = tk.Frame(parent, padx=20, pady=10)
         form_frame.pack(fill="both", expand=True)
         
-        tk.Label(form_frame, text="标题:", font=("Arial", 11)).pack(anchor="w")
-        self.ann_title_entry = tk.Entry(form_frame, font=("Arial", 11), width=50)
+        tk.Label(form_frame, text="标题:", font=(self.custom_font_family, 11)).pack(anchor="w")
+        self.ann_title_entry = tk.Entry(form_frame, font=(self.custom_font_family, 11), width=50)
         self.ann_title_entry.pack(pady=5, fill="x")
         
-        tk.Label(form_frame, text="内容:", font=("Arial", 11)).pack(anchor="w", pady=(10,0))
-        self.ann_content_text = tk.Text(form_frame, height=10, font=("Arial", 11), wrap=tk.WORD)
+        tk.Label(form_frame, text="内容:", font=(self.custom_font_family, 11)).pack(anchor="w", pady=(10,0))
+        self.ann_content_text = tk.Text(form_frame, height=10, font=(self.custom_font_family, 11), wrap=tk.WORD)
         self.ann_content_text.pack(fill="both", expand=True, pady=5)
         
         tk.Button(
@@ -87,7 +103,7 @@ class AdminWindow:
             command=self.post_announcement,
             bg="#FF9800",
             fg="white",
-            font=("Arial", 12, "bold"),
+            font=(self.custom_font_family, 12, "bold"),
             width=15
         ).pack(pady=20)
 
@@ -110,13 +126,14 @@ class AdminWindow:
     def setup_submissions_tab(self, parent):
         toolbar = tk.Frame(parent, bg="#f0f0f0", height=40)
         toolbar.pack(fill="x", pady=5)
-        tk.Label(toolbar, text="用户提交审核", font=("Arial", 12, "bold")).pack(side="left", padx=10)
+        tk.Label(toolbar, text="用户提交审核", font=(self.custom_font_family, 12, "bold")).pack(side="left", padx=10)
         tk.Button(
             toolbar,
             text="刷新",
             command=self.refresh_submissions,
             bg="#2196F3",
-            fg="white"
+            fg="white",
+            font=(self.custom_font_family, 10)
         ).pack(side="right", padx=10)
         
         columns = ("时间", "用户名", "标题", "状态", "操作")
@@ -146,10 +163,10 @@ class AdminWindow:
         action_frame = tk.Frame(parent, bg="#f0f0f0", height=50)
         action_frame.pack(fill="x", pady=5)
         
-        self.approve_btn = tk.Button(action_frame, text="批准", command=self.approve_selected, bg="#4CAF50", fg="white", state="disabled")
+        self.approve_btn = tk.Button(action_frame, text="批准", command=self.approve_selected, bg="#4CAF50", fg="white", state="disabled", font=(self.custom_font_family, 10))
         self.approve_btn.pack(side="left", padx=20, pady=10)
         
-        self.reject_btn = tk.Button(action_frame, text="拒绝", command=self.reject_selected, bg="#f44336", fg="white", state="disabled")
+        self.reject_btn = tk.Button(action_frame, text="拒绝", command=self.reject_selected, bg="#f44336", fg="white", state="disabled", font=(self.custom_font_family, 10))
         self.reject_btn.pack(side="left", padx=10, pady=10)
 
     def on_submission_select(self, event):
@@ -190,15 +207,15 @@ class AdminWindow:
         # 头部信息
         header_frame = tk.Frame(dialog, bg="#e3f2fd", pady=10)
         header_frame.pack(fill="x")
-        tk.Label(header_frame, text=sub_doc['title'], font=("Arial", 14, "bold"), bg="#e3f2fd").pack()
+        tk.Label(header_frame, text=sub_doc['title'], font=(self.custom_font_family, 14, "bold"), bg="#e3f2fd").pack()
         info_str = f"作者: {sub_doc['username']} | 时间: {sub_doc['created_at'].strftime('%Y-%m-%d %H:%M') if sub_doc['created_at'] else '未知'} | 状态: {sub_doc['status']}"
-        tk.Label(header_frame, text=info_str, font=("Arial", 10), bg="#e3f2fd", fg="#666").pack()
+        tk.Label(header_frame, text=info_str, font=(self.custom_font_family, 10), bg="#e3f2fd", fg="#666").pack()
         
         # 内容区域
         content_frame = tk.Frame(dialog, padx=10, pady=10)
         content_frame.pack(fill="both", expand=True)
         
-        text_widget = scrolledtext.ScrolledText(content_frame, font=("Arial", 11), wrap=tk.WORD, state="disabled")
+        text_widget = scrolledtext.ScrolledText(content_frame, font=(self.custom_font_family, 11), wrap=tk.WORD, state="disabled")
         text_widget.pack(fill="both", expand=True)
         
         # 插入内容并设置为只读
@@ -232,16 +249,16 @@ class AdminWindow:
                     messagebox.showerror("错误", "更新失败")
 
         if current_status == SubmissionStatus.APPROVED:
-            tk.Label(btn_frame, text="当前状态: 已批准", fg="#4CAF50", font=("Arial", 10)).pack(side="left", padx=20)
-            tk.Button(btn_frame, text="重新拒绝", command=do_reject, bg="#f44336", fg="white").pack(side="right", padx=20)
+            tk.Label(btn_frame, text="当前状态: 已批准", fg="#4CAF50", font=(self.custom_font_family, 10)).pack(side="left", padx=20)
+            tk.Button(btn_frame, text="重新拒绝", command=do_reject, bg="#f44336", fg="white", font=(self.custom_font_family, 10)).pack(side="right", padx=20)
         elif current_status == SubmissionStatus.REJECTED:
-            tk.Label(btn_frame, text="当前状态: 已拒绝", fg="#f44336", font=("Arial", 10)).pack(side="left", padx=20)
-            tk.Button(btn_frame, text="重新批准", command=do_approve, bg="#4CAF50", fg="white").pack(side="right", padx=20)
+            tk.Label(btn_frame, text="当前状态: 已拒绝", fg="#f44336", font=(self.custom_font_family, 10)).pack(side="left", padx=20)
+            tk.Button(btn_frame, text="重新批准", command=do_approve, bg="#4CAF50", fg="white", font=(self.custom_font_family, 10)).pack(side="right", padx=20)
         else:
-            tk.Button(btn_frame, text="拒绝", command=do_reject, bg="#f44336", fg="white", width=10).pack(side="left", padx=20, expand=True)
-            tk.Button(btn_frame, text="批准", command=do_approve, bg="#4CAF50", fg="white", width=10).pack(side="right", padx=20, expand=True)
+            tk.Button(btn_frame, text="拒绝", command=do_reject, bg="#f44336", fg="white", width=10, font=(self.custom_font_family, 10)).pack(side="left", padx=20, expand=True)
+            tk.Button(btn_frame, text="批准", command=do_approve, bg="#4CAF50", fg="white", width=10, font=(self.custom_font_family, 10)).pack(side="right", padx=20, expand=True)
             
-        tk.Button(dialog, text="关闭", command=dialog.destroy).pack(pady=5)
+        tk.Button(dialog, text="关闭", command=dialog.destroy, font=(self.custom_font_family, 10)).pack(pady=5)
 
     def approve_selected(self):
         selection = self.submissions_tree.selection()
@@ -291,13 +308,14 @@ class AdminWindow:
     def setup_users_tab(self, parent):
         toolbar = tk.Frame(parent, bg="#f0f0f0", height=40)
         toolbar.pack(fill="x", pady=5)
-        tk.Label(toolbar, text="用户列表", font=("Arial", 12, "bold")).pack(side="left", padx=10)
+        tk.Label(toolbar, text="用户列表", font=(self.custom_font_family, 12, "bold")).pack(side="left", padx=10)
         tk.Button(
             toolbar,
             text="刷新",
             command=self.refresh_users,
             bg="#2196F3",
-            fg="white"
+            fg="white",
+            font=(self.custom_font_family, 10)
         ).pack(side="right", padx=10)
         
         columns = ("用户名", "邮箱", "角色", "注册时间", "状态", "操作")
@@ -383,8 +401,8 @@ class AdminWindow:
         dialog.transient(self.window)
         dialog.grab_set()
         
-        tk.Label(dialog, text=f"正在管理用户: {username}", font=("Arial", 12, "bold")).pack(pady=10)
-        tk.Label(dialog, text=f"当前角色: {current_role}", font=("Arial", 10)).pack(pady=5)
+        tk.Label(dialog, text=f"正在管理用户: {username}", font=(self.custom_font_family, 12, "bold")).pack(pady=10)
+        tk.Label(dialog, text=f"当前角色: {current_role}", font=(self.custom_font_family, 10)).pack(pady=5)
         
         btn_frame = tk.Frame(dialog)
         btn_frame.pack(pady=10)
@@ -426,7 +444,7 @@ class AdminWindow:
             edit_win.transient(dialog)
             edit_win.grab_set()
             
-            tk.Label(edit_win, text="新邮箱:", font=("Arial", 10)).pack(pady=5)
+            tk.Label(edit_win, text="新邮箱:", font=(self.custom_font_family, 10)).pack(pady=5)
             email_var = tk.StringVar(value=current_email)
             entry = tk.Entry(edit_win, textvariable=email_var, width=30)
             entry.pack(pady=5)
@@ -440,7 +458,7 @@ class AdminWindow:
                     # 刷新主列表以显示新邮箱（如果需要）
                     self.refresh_users()
                     
-            tk.Button(edit_win, text="保存", command=save_email, bg="#4CAF50", fg="white").pack(pady=10)
+            tk.Button(edit_win, text="保存", command=save_email, bg="#4CAF50", fg="white", font=(self.custom_font_family, 10)).pack(pady=10)
 
         def do_reset_password():
             reset_win = tk.Toplevel(dialog)
@@ -449,13 +467,13 @@ class AdminWindow:
             reset_win.transient(dialog)
             reset_win.grab_set()
             
-            tk.Label(reset_win, text=f"为用户 [{username}] 设置新密码", font=("Arial", 10)).pack(pady=5)
-            tk.Label(reset_win, text="新密码:", font=("Arial", 10)).pack(pady=2)
+            tk.Label(reset_win, text=f"为用户 [{username}] 设置新密码", font=(self.custom_font_family, 10)).pack(pady=5)
+            tk.Label(reset_win, text="新密码:", font=(self.custom_font_family, 10)).pack(pady=2)
             pwd_var = tk.StringVar()
             pwd_entry = tk.Entry(reset_win, textvariable=pwd_var, show="*", width=30)
             pwd_entry.pack(pady=2)
             
-            tk.Label(reset_win, text="确认密码:", font=("Arial", 10)).pack(pady=2)
+            tk.Label(reset_win, text="确认密码:", font=(self.custom_font_family, 10)).pack(pady=2)
             confirm_pwd_var = tk.StringVar()
             confirm_entry = tk.Entry(reset_win, textvariable=confirm_pwd_var, show="*", width=30)
             confirm_entry.pack(pady=2)
@@ -475,26 +493,26 @@ class AdminWindow:
                 if success:
                     reset_win.destroy()
                     
-            tk.Button(reset_win, text="确认重置", command=save_password, bg="#FF9800", fg="white").pack(pady=10)
+            tk.Button(reset_win, text="确认重置", command=save_password, bg="#FF9800", fg="white", font=(self.custom_font_family, 10)).pack(pady=10)
 
         if is_self:
-             tk.Label(btn_frame, text="当前登录账号，无法更改角色或删除自己", fg="#666").pack(pady=5)
+             tk.Label(btn_frame, text="当前登录账号，无法更改角色或删除自己", fg="#666", font=(self.custom_font_family, 10)).pack(pady=5)
              # 允许自己修改邮箱和密码
-             tk.Button(btn_frame, text="修改我的邮箱", command=do_edit_email, bg="#2196F3", fg="white").pack(fill="x", padx=20, pady=2)
-             tk.Button(btn_frame, text="修改我的密码", command=do_reset_password, bg="#2196F3", fg="white").pack(fill="x", padx=20, pady=2)
+             tk.Button(btn_frame, text="修改我的邮箱", command=do_edit_email, bg="#2196F3", fg="white", font=(self.custom_font_family, 10)).pack(fill="x", padx=20, pady=2)
+             tk.Button(btn_frame, text="修改我的密码", command=do_reset_password, bg="#2196F3", fg="white", font=(self.custom_font_family, 10)).pack(fill="x", padx=20, pady=2)
         else:
             if current_role == UserRole.USER:
-                tk.Button(btn_frame, text="升级为管理员", command=do_promote, bg="#4CAF50", fg="white").pack(fill="x", padx=20, pady=2)
+                tk.Button(btn_frame, text="升级为管理员", command=do_promote, bg="#4CAF50", fg="white", font=(self.custom_font_family, 10)).pack(fill="x", padx=20, pady=2)
             
             if current_role == UserRole.ADMIN:
                 if is_operator_initial_admin and not is_initial_admin:
-                     tk.Button(btn_frame, text="降级为普通用户", command=do_demote, bg="#FF9800", fg="white").pack(fill="x", padx=20, pady=2)
+                     tk.Button(btn_frame, text="降级为普通用户", command=do_demote, bg="#FF9800", fg="white", font=(self.custom_font_family, 10)).pack(fill="x", padx=20, pady=2)
                 elif not is_operator_initial_admin:
-                     tk.Label(btn_frame, text="仅初始管理员可操作其他管理员", fg="#999").pack(pady=2)
+                     tk.Label(btn_frame, text="仅初始管理员可操作其他管理员", fg="#999", font=(self.custom_font_family, 10)).pack(pady=2)
                 
             # 管理员可以修改其他用户的邮箱和密码
-            tk.Button(btn_frame, text="修改用户邮箱", command=do_edit_email, bg="#2196F3", fg="white").pack(fill="x", padx=20, pady=2)
-            tk.Button(btn_frame, text="重置用户密码", command=do_reset_password, bg="#FF9800", fg="white").pack(fill="x", padx=20, pady=2)
+            tk.Button(btn_frame, text="修改用户邮箱", command=do_edit_email, bg="#2196F3", fg="white", font=(self.custom_font_family, 10)).pack(fill="x", padx=20, pady=2)
+            tk.Button(btn_frame, text="重置用户密码", command=do_reset_password, bg="#FF9800", fg="white", font=(self.custom_font_family, 10)).pack(fill="x", padx=20, pady=2)
 
             can_delete = True
             if is_initial_admin:
@@ -503,11 +521,11 @@ class AdminWindow:
                 can_delete = False
             
             if can_delete:
-                tk.Button(btn_frame, text="删除用户", command=do_delete, bg="#f44336", fg="white").pack(fill="x", padx=20, pady=2)
+                tk.Button(btn_frame, text="删除用户", command=do_delete, bg="#f44336", fg="white", font=(self.custom_font_family, 10)).pack(fill="x", padx=20, pady=2)
             else:
-                 tk.Label(btn_frame, text="无权删除该用户", fg="#999").pack(pady=2)
+                 tk.Label(btn_frame, text="无权删除该用户", fg="#999", font=(self.custom_font_family, 10)).pack(pady=2)
         
-        tk.Button(dialog, text="关闭", command=dialog.destroy).pack(pady=10)
+        tk.Button(dialog, text="关闭", command=dialog.destroy, font=(self.custom_font_family, 10)).pack(pady=10)
 
     def get_user_email(self, username):
         # 修改：通过 UserService 获取用户信息，而不是直接操作 DB
@@ -519,7 +537,7 @@ class AdminWindow:
         info_frame = tk.Frame(parent, padx=30, pady=20)
         info_frame.pack(fill="both", expand=True)
         
-        tk.Label(info_frame, text="👤", font=("Arial", 48), bg="#e0e0e0", width=4, height=2).pack(pady=20)
+        tk.Label(info_frame, text="👤", font=(self.custom_font_family, 48), bg="#e0e0e0", width=4, height=2).pack(pady=20)
         
         # 新增：通过 UserService 获取最新用户信息
         current_user_data = self.user_service.get_user_by_username(self.admin['username'])
@@ -546,8 +564,8 @@ class AdminWindow:
         for label_text, value_text in info_list:
             frame = tk.Frame(info_frame)
             frame.pack(fill="x", pady=5)
-            tk.Label(frame, text=f"{label_text}:", font=("Arial", 11, "bold"), width=10, anchor="w").pack(side="left")
-            tk.Label(frame, text=value_text, font=("Arial", 11), anchor="w").pack(side="left", fill="x", expand=True)
+            tk.Label(frame, text=f"{label_text}:", font=(self.custom_font_family, 11, "bold"), width=10, anchor="w").pack(side="left")
+            tk.Label(frame, text=value_text, font=(self.custom_font_family, 11), anchor="w").pack(side="left", fill="x", expand=True)
 
     def logout(self):
         if messagebox.askyesno("确认", "确定要登出吗？"):

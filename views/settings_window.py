@@ -3,15 +3,17 @@ from tkinter import messagebox, ttk
 from utils.config_manager import ConfigManager
 from utils.db import Database
 from config import Config
+from utils.music_manager import MusicManager
 
 class SettingsWindow:
     def __init__(self, parent):
         self.parent = parent
         self.config_manager = ConfigManager()
+        self.music_manager = MusicManager()
         
         self.window = tk.Toplevel(parent)
         self.window.title("云端数据库配置")
-        self.window.geometry("600x400")
+        self.window.geometry("600x450") # 稍微增加高度以容纳新控件
         self.window.resizable(False, False)
         self.window.transient(parent)
         self.window.grab_set()
@@ -26,7 +28,7 @@ class SettingsWindow:
             font=("Arial", 16, "bold"),
             fg="#1976D2"
         )
-        title_label.pack(pady=20)
+        title_label.pack(pady=15)
         
         info_text = """请配置您的MongoDB Atlas云端数据库连接
         
@@ -43,7 +45,7 @@ class SettingsWindow:
         )
         info_label.pack(pady=10, padx=30)
         
-        main_frame = tk.Frame(self.window, padx=30, pady=20)
+        main_frame = tk.Frame(self.window, padx=30, pady=10)
         main_frame.pack(fill="both", expand=True)
         
         tk.Label(
@@ -63,8 +65,27 @@ class SettingsWindow:
         self.uri_text = tk.Text(main_frame, height=4, font=("Arial", 10))
         self.uri_text.pack(fill="x", pady=5)
         
+        # 新增：背景音乐设置区域
+        music_frame = tk.Frame(main_frame, pady=10)
+        music_frame.pack(fill="x", pady=10)
+        
+        tk.Label(
+            music_frame,
+            text="背景音乐:",
+            font=("Arial", 11, "bold")
+        ).pack(side="left")
+        
+        self.music_var = tk.BooleanVar(value=self.music_manager.get_status())
+        tk.Checkbutton(
+            music_frame,
+            text="开启/关闭",
+            variable=self.music_var,
+            command=self.toggle_music,
+            font=("Arial", 10)
+        ).pack(side="left", padx=10)
+
         button_frame = tk.Frame(main_frame)
-        button_frame.pack(pady=20)
+        button_frame.pack(pady=15)
         
         tk.Button(
             button_frame,
@@ -102,7 +123,12 @@ class SettingsWindow:
             font=("Arial", 10)
         )
         self.status_label.pack(pady=10)
-    
+
+    def toggle_music(self):
+        """切换音乐状态"""
+        is_on = self.music_var.get()
+        self.music_manager.set_enabled(is_on)
+
     def load_current_config(self):
         mongodb_uri = self.config_manager.load_config()
         if mongodb_uri:
@@ -110,6 +136,8 @@ class SettingsWindow:
             self.status_label.config(text="✓ 已加载现有配置", fg="#4CAF50")
         elif Config.MONGODB_URI:
             self.uri_text.insert("1.0", Config.MONGODB_URI)
+        
+        self.music_var.set(self.music_manager.get_status())
     
     def test_connection(self):
         mongodb_uri = self.uri_text.get("1.0", tk.END).strip()
